@@ -1,5 +1,0 @@
-BIBLIOTECA ESTANDAR DE PYTHON
-https://docs.python.org/es/3.8/tutorial/stdlib.html		
-
-PRACTICA FETA 18-19
-https://github.comraultds/Xarxes-P1-2019
