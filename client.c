@@ -109,6 +109,8 @@ struct TCPSocket tcp_socket;
 struct UDPSocket udp_socket;
 struct UDPPackage server_data;
 
+struct UDPPackage received_from_server;
+
 /* FUNCIONS PRINCIPALS */
 void parse_args(int argc, char *argv[]);
 void setup_tcp_socket();
@@ -120,7 +122,8 @@ void register_process();
 void register_loop(struct UDPPackage reg_request);
 int first_P_register_req(struct UDPPackage reg_request);
 int second_register_req(struct UDPPackage reg_request);
-void received_udp_package(struct UDPPackage received_from_server);
+void received_udp_package(struct UDPPackage received_pack);
+void send_info_ack();
 
 void build_client_struct();
 struct UDPPackage build_udp_package(unsigned char, char[], char[], char[]);
@@ -361,40 +364,35 @@ struct TCPPackage build_tcp_package(unsigned char package_type, char transmitter
 void register_loop(struct UDPPackage reg_request) {
     int attempts;
     int packages = 0;
-    struct UDPPackage received_from_server;
 
     for(attempts = 0; attempts < O; attempts++) {
         packages = first_P_register_req(reg_request);
         if(packages == P) {
             packages = second_register_req(reg_request);
+            if(packages < N) {
+                break;
+            }
         } else {
             break;
         }
 
-        //Falta pulir els ifs aquestos
-        if(packages <= N && client.state == WAIT_ACK_REG) {
-            printf("%i", packages);
-            debug_message("INF. -> Registre completat");
-            break;
-        }
-
-        if(packages >= N && attempts < O) {
+        if(packages >= N && attempts - 1 < O) {
             sleep(U);
             debug_message("INF -> Es procedirà a reintentar el procés de registre");
         }
-
     }
 
-    if(attempts == O) {
+    if(attempts >= O) {  //S'han superat el màxim d'intents
         perror("Error al establir connexió amb el servidor");
         exit(EXIT_FAILURE);
-    } else {
-        debug_message("No estamos tan mal");
+    } else { //Si el paquet és correcte (recv > 0) arriba aquí bé
+        //print_udp_package(received_from_server);
+        received_udp_package(received_from_server);
     }
+
 }
 
 int first_P_register_req(struct UDPPackage reg_request) {
-    struct UDPPackage received_from_server;
     int p1;
     ssize_t send, recv;
     int packages = 0;
@@ -414,12 +412,11 @@ int first_P_register_req(struct UDPPackage reg_request) {
             debug_message("INF. -> Sol·licitud de registre enviada. Estat del client: WAIT_ACK_REG");
         }
 
-        recv = recvfrom(udp_socket.udp_socket_fd, &received_from_server, 84, 0,
-                        (struct sockaddr *) &udp_socket.udp_socket_address, (socklen_t * ) sizeof(udp_socket.udp_socket_address));
-        //Aqui arriba sense problemes
-        printf("RECV %li", recv);
+        recv = recvfrom(udp_socket.udp_socket_fd, &received_from_server, sizeof(received_from_server), 0,
+                        (struct sockaddr *) 0, (socklen_t *) 0);
         print_udp_package(received_from_server);
-        if (recv < 0) {     //Normalment dona recv -1
+
+        if (recv < 0) {
             sleep(T);
         } else {
             return packages;
@@ -430,7 +427,6 @@ int first_P_register_req(struct UDPPackage reg_request) {
 }
 
 int second_register_req(struct UDPPackage reg_request) {
-    struct UDPPackage received_from_server;
     int p2;
     ssize_t send, recv;
     int packages = P;
@@ -452,25 +448,22 @@ int second_register_req(struct UDPPackage reg_request) {
         }
 
         recv = recvfrom(udp_socket.udp_socket_fd, &received_from_server, sizeof(received_from_server), 0,
-                        (struct sockaddr *) &udp_socket.udp_socket_address, (socklen_t * ) sizeof(udp_socket.udp_socket_address));
-
-        send_time = package_timer(send_time);
-        printf("RECV %li", recv);
+                        (struct sockaddr *) 0, (socklen_t *) 0);
         print_udp_package(received_from_server);
+
         if (recv < 0) {
             if(packages == N) {
-                break;
+                return N;
             }
+            send_time = package_timer(send_time);
             sleep(send_time);
         } else {
             return packages;
         }
     }
 
-    return packages;
-
+    return P;
 }
-
 
 int package_timer(int send_time) {
     if(send_time < Q * T) {
@@ -480,26 +473,32 @@ int package_timer(int send_time) {
     }
 }
 
-void received_udp_package(struct UDPPackage received_from_server) {
-    switch(received_from_server.package_type) {
-        case REG_ACK:
+void received_udp_package(struct UDPPackage received_pack) {
+    if(received_pack.package_type == REG_ACK) {
+        printf("Rebut paquet REG_ACK -> S'enviarà un paquet REG_INFO al servidor\n");
+        //server_data = build_udp_package();
 
-
-        case REG_NACK:
-
-        case REG_REJ:
-            printf("Rebut paquet REG_REJ -> S'iniciarà un nou procés de registre");
-            client.state = NOT_REGISTERED;
-            register_process();
-        case INFO_ACK:
-            printf("Rebut paquet INFO_ACK -> Estat del client: WAIT_ACK_INFO -> REGISTERED");
-            debug_message("INF. -> Fase de registre completada amb èxit");
-            client.state = REGISTERED;
-        case INFO_NACK:
-
-        default:
-            printf("Tipus de paquet no identificat: ERR. -> mètode received_udp_package()");
+        send_info_ack();
+    } else if(received_pack.package_type == REG_NACK) {
+        printf("Rebut paquet REG_NACK -> \n");
+    } else if(received_pack.package_type == REG_REJ) {
+        printf("Rebut paquet REG_REJ -> S'iniciarà un nou procés de registre\n");
+        client.state = NOT_REGISTERED;
+        register_process();
+    } else if(received_pack.package_type == INFO_ACK) {
+        printf("Rebut paquet INFO_ACK -> Estat del client: WAIT_ACK_INFO -> REGISTERED\n");
+        debug_message("INF. -> Fase de registre completada amb èxit");
+        client.state = REGISTERED;
+    } else if(received_pack.package_type == INFO_NACK) {
+        printf("Rebut paquet INFO_NACK -> \n");
+    } else {
+        printf("Tipus de paquet no identificat: ERR. -> mètode received_udp_package()\n");
+        exit(EXIT_FAILURE);
     }
+}
+
+void send_info_ack() {
+
 }
 
 void print_client() {
