@@ -79,6 +79,7 @@ struct UDPPackage {
 
 struct Client {
     char client_id[11];
+    char all_elems[75];
 
     char elem_one[15];
     char elem_two[15];
@@ -86,7 +87,6 @@ struct Client {
     char elem_four[15];
     char elem_five[15];
 
-    char server[15];
     int state;
 };
 
@@ -102,12 +102,19 @@ struct UDPSocket {
     struct sockaddr_in udp_socket_address;
 };
 
+struct Server {
+    char transmitter_id[11];
+    char communication_id[11];
+    char server_ip[15];
+};
+
 FILE *client_file;
 bool active_debug = false;
+int num_reg_pr = 0;
 struct Client client;
 struct TCPSocket tcp_socket;
 struct UDPSocket udp_socket;
-struct UDPPackage server_data;
+struct Server server_data;
 
 struct UDPPackage received_from_server;
 
@@ -118,11 +125,11 @@ void setup_udp_socket();
 void setup_client(char client_cfg[]);
 void read_file();
 void debug_message(char message[]);
-void register_process();
-void register_loop(struct UDPPackage reg_request);
+void register_process(int num_process);
+int register_loop(struct UDPPackage reg_request);
 int first_P_register_req(struct UDPPackage reg_request);
 int second_register_req(struct UDPPackage reg_request);
-void received_udp_package(struct UDPPackage received_pack);
+void udp_package_treatment(struct UDPPackage received_pack);
 void send_info_ack();
 
 void build_client_struct();
@@ -133,6 +140,7 @@ struct TCPPackage build_tcp_package(unsigned char, char[], char[], char[], char[
 void print_client();
 void print_tcp_package(struct TCPPackage package);
 void print_udp_package(struct UDPPackage package);
+void print_server_data();
 size_t getline();
 int package_timer(int send_time);
 
@@ -157,7 +165,7 @@ int main(int argc, char *argv[]) {
 
     setup_tcp_socket();
     setup_udp_socket();
-    register_process();
+    register_process(num_reg_pr);
 }
 
 void parse_args(int argc, char *argv[]) {
@@ -235,6 +243,7 @@ void build_client_struct(int i, char *token) {
     if(i == 1) {
         strcpy(client.client_id, token);
     } else if (i == 3) {
+        strcpy(client.all_elems, token);
         int num = 1;
         char *elems = strtok(token, ";= \n");
         while(elems != NULL) {
@@ -256,7 +265,7 @@ void build_client_struct(int i, char *token) {
     } else if (i == 5) {
         tcp_socket.local_tcp = atoi(token);
     } else if (i == 7) {
-        strcpy(client.server, token);
+        strcpy(server_data.server_ip, token);
     } else if (i == 9) {
         udp_socket.server_udp = atoi(token);
     }
@@ -286,8 +295,6 @@ void setup_tcp_socket() {
     tcp_socket.tcp_socket_address.sin_family = AF_INET;
 
     debug_message("INF. -> Socket TCP inicialitzat correctament");
-
-    // http://www.chuidiang.org/clinux/sockets/udp/udp.php
 }
 
 void setup_udp_socket() {
@@ -327,69 +334,39 @@ void debug_message(char message[]) {
         strftime(time_string, LONG_MESSAGE, "%b %d, %Y at %H:%M:%S", actual_time);
         printf("%s || %s\n", time_string, message);
     }
-    // https://ccia.ugr.es/~jfv/ed1/c++/cdrom3/TIC-CD/web/tema9/teoria_14_2.htm
 }
 
-void register_process() {
+void register_process(int num_process) {
     struct UDPPackage reg_request = build_udp_package(REG_REQ, client.client_id, "0000000000", "");
     print_udp_package(reg_request);
 
-    register_loop(reg_request);
-}
-
-struct UDPPackage build_udp_package(unsigned char package_type, char transmitter_id[], char communication_id[], char data[]) {
-    struct UDPPackage udp_package;
-
-    udp_package.package_type = package_type;
-    strcpy(udp_package.transmitter_id, transmitter_id);
-    strcpy(udp_package.communication_id, communication_id);
-    strcpy(udp_package.data, data);
-
-    return udp_package;
-}
-
-struct TCPPackage build_tcp_package(unsigned char package_type, char transmitter_id[], char communication_id[], char elem[], char value[], char info[]) {
-    struct TCPPackage tcp_package;
-
-    tcp_package.package_type = package_type;
-    strcpy(tcp_package.transmitter_id, transmitter_id);
-    strcpy(tcp_package.communication_id, communication_id);
-    strcpy(tcp_package.elem, elem);
-    strcpy(tcp_package.value, value);
-    strcpy(tcp_package.info, info);
-
-    return tcp_package;
-}
-
-void register_loop(struct UDPPackage reg_request) {
-    int attempts;
-    int packages = 0;
-
-    for(attempts = 0; attempts < O; attempts++) {
-        packages = first_P_register_req(reg_request);
-        if(packages == P) {
-            packages = second_register_req(reg_request);
-            if(packages < N) {
-                break;
-            }
-        } else {
+    int attempts, packages;
+    for(attempts = num_process; attempts < O; attempts++) {
+        packages = register_loop(reg_request);
+        if(packages <= N) {
             break;
         }
 
         if(packages >= N && attempts - 1 < O) {
             sleep(U);
-            debug_message("INF -> Es procedirà a reintentar el procés de registre");
+            debug_message("INF -> Es procedirà a iniciar un nou procés de registre");
         }
     }
 
     if(attempts >= O) {  //S'han superat el màxim d'intents
-        perror("Error al establir connexió amb el servidor");
+        printf("Error al establir connexió amb el servidor");
         exit(EXIT_FAILURE);
-    } else { //Si el paquet és correcte (recv > 0) arriba aquí bé
-        //print_udp_package(received_from_server);
-        received_udp_package(received_from_server);
+    } else {
+        udp_package_treatment(received_from_server);
     }
+}
 
+int register_loop(struct UDPPackage reg_request) {
+    int packages = first_P_register_req(reg_request);
+    if(packages == P) {
+        packages = second_register_req(reg_request);
+    }
+    return packages;
 }
 
 int first_P_register_req(struct UDPPackage reg_request) {
@@ -473,18 +450,23 @@ int package_timer(int send_time) {
     }
 }
 
-void received_udp_package(struct UDPPackage received_pack) {
+void udp_package_treatment(struct UDPPackage received_pack) {
     if(received_pack.package_type == REG_ACK) {
         printf("Rebut paquet REG_ACK -> S'enviarà un paquet REG_INFO al servidor\n");
-        //server_data = build_udp_package();
+        strcpy(server_data.transmitter_id, received_pack.transmitter_id);
+        strcpy(server_data.communication_id, received_pack.communication_id);
+        print_server_data();
 
         send_info_ack();
     } else if(received_pack.package_type == REG_NACK) {
-        printf("Rebut paquet REG_NACK -> \n");
+        printf("Rebut paquet REG_NACK -> Reiniciem l'enviament de paquets de registre\n");
+        client.state = NOT_REGISTERED;
+        register_process(num_reg_pr);
     } else if(received_pack.package_type == REG_REJ) {
         printf("Rebut paquet REG_REJ -> S'iniciarà un nou procés de registre\n");
         client.state = NOT_REGISTERED;
-        register_process();
+        num_reg_pr++;
+        register_process(num_reg_pr);
     } else if(received_pack.package_type == INFO_ACK) {
         printf("Rebut paquet INFO_ACK -> Estat del client: WAIT_ACK_INFO -> REGISTERED\n");
         debug_message("INF. -> Fase de registre completada amb èxit");
@@ -492,26 +474,57 @@ void received_udp_package(struct UDPPackage received_pack) {
     } else if(received_pack.package_type == INFO_NACK) {
         printf("Rebut paquet INFO_NACK -> \n");
     } else {
-        printf("Tipus de paquet no identificat: ERR. -> mètode received_udp_package()\n");
-        exit(EXIT_FAILURE);
+        printf("Rebut paquet no identificat: S'iniciarà un nou procés de registre\n");
+        client.state = NOT_REGISTERED;
+        register_process(num_reg_pr);
     }
 }
 
 void send_info_ack() {
+    char data[61];
+    sprintf(data, "%d,", tcp_socket.local_tcp);
+    strcat(data, client.all_elems);
 
+    struct UDPPackage reg_info = build_udp_package(REG_INFO, server_data.transmitter_id, server_data.communication_id, data);
+    print_udp_package(reg_info);
+}
+
+struct UDPPackage build_udp_package(unsigned char package_type, char transmitter_id[], char communication_id[], char data[]) {
+    struct UDPPackage udp_package;
+
+    udp_package.package_type = package_type;
+    strcpy(udp_package.transmitter_id, transmitter_id);
+    strcpy(udp_package.communication_id, communication_id);
+    strcpy(udp_package.data, data);
+
+    return udp_package;
+}
+
+struct TCPPackage build_tcp_package(unsigned char package_type, char transmitter_id[], char communication_id[], char elem[], char value[], char info[]) {
+    struct TCPPackage tcp_package;
+
+    tcp_package.package_type = package_type;
+    strcpy(tcp_package.transmitter_id, transmitter_id);
+    strcpy(tcp_package.communication_id, communication_id);
+    strcpy(tcp_package.elem, elem);
+    strcpy(tcp_package.value, value);
+    strcpy(tcp_package.info, info);
+
+    return tcp_package;
 }
 
 void print_client() {
-    printf("/* CLIENT */\n");
+    printf("/* CLIENT (cfg) */\n");
     printf("Id: %s\n", client.client_id);
     printf("State: 0x%0X\n", client.state);
     printf("Local-TCP: %i\n", tcp_socket.local_tcp);
+    printf("AllElems: %s\n", client.all_elems);
     printf("Elem1: %s\n", client.elem_one);
     printf("Elem2: %s\n", client.elem_two);
     printf("Elem3: %s\n", client.elem_three);
     printf("Elem4: %s\n", client.elem_four);
     printf("Elem5: %s\n", client.elem_five);
-    printf("Server: %s\n", client.server);
+    printf("Server: %s\n", server_data.server_ip);
     printf("Server-UDP: %i\n", udp_socket.server_udp);
     putchar('\n');
 }
@@ -533,6 +546,14 @@ void print_udp_package(struct UDPPackage package) {
     printf("Transmitter_id: %s\n", package.transmitter_id);
     printf("Communication_id: %s\n", package.communication_id);
     printf("Data: %s\n", package.data);
+    putchar('\n');
+}
+
+void print_server_data() {
+    printf("/* SERVER PARAMS */\n");
+    printf("Transmitter_id: %s\n", server_data.transmitter_id);
+    printf("Communication_id: %s\n", server_data.communication_id);
+    printf("Server: %s\n", server_data.server_ip);
     putchar('\n');
 }
 
