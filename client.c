@@ -354,7 +354,7 @@ void register_process(int num_process) {
     }
 
     if(attempts >= O) {  //S'han superat el màxim d'intents
-        printf("Error al establir connexió amb el servidor");
+        printf("ERR. -> No s'ha pogut establir connexió amb el servidor.\n");
         exit(EXIT_FAILURE);
     } else {
         udp_package_treatment(received_from_server);
@@ -481,12 +481,40 @@ void udp_package_treatment(struct UDPPackage received_pack) {
 }
 
 void send_info_ack() {
+    ssize_t send, recv;
     char data[61];
     sprintf(data, "%d,", tcp_socket.local_tcp);
     strcat(data, client.all_elems);
 
-    struct UDPPackage reg_info = build_udp_package(REG_INFO, server_data.transmitter_id, server_data.communication_id, data);
+    struct UDPPackage reg_info = build_udp_package(REG_INFO, client.client_id, server_data.communication_id, data);
     print_udp_package(reg_info);
+
+
+    udp_socket.udp_socket_address.sin_port = htons(atoi(received_from_server.data));
+    send = sendto(udp_socket.udp_socket_fd, &reg_info, sizeof(reg_info), 0,
+                      (struct sockaddr *) &udp_socket.udp_socket_address, sizeof(udp_socket.udp_socket_address));
+    if(send < 0) {
+        perror("Error al enviar el paquet REG_INFO al servidor. ERR. -> mètode sendto()");
+    } else {
+        if(client.state == WAIT_ACK_REG) {
+            client.state = WAIT_ACK_INFO;
+            debug_message("INF. -> Paquet REG_INFO enviat al servidor. Estat del client: WAIT_ACK_REG -> WAIT_ACK_INFO");
+        }
+
+        recv = recvfrom(udp_socket.udp_socket_fd, &received_from_server, sizeof(received_from_server), 0,
+                        (struct sockaddr *) 0, (socklen_t *) 0);
+        print_udp_package(received_from_server);
+        sleep(2 * T);
+        if(recv < 0) {
+            client.state = NOT_REGISTERED;
+            debug_message("INF. -> No s'ha rebut el paquet de confirmació de client: Estat del client: WAIT_ACK_INFO -> NOT_REGISTERED");
+            printf("INF -> S'iniciarà un nou procés de registre: Paquet de confirmació de client NO rebut");
+            num_reg_pr++;
+            register_process(num_reg_pr);
+        } else {
+            udp_package_treatment(received_from_server);
+        }
+    }
 }
 
 struct UDPPackage build_udp_package(unsigned char package_type, char transmitter_id[], char communication_id[], char data[]) {
