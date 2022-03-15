@@ -384,9 +384,9 @@ int first_P_register_req(struct UDPPackage reg_request) {
 
         if (client.state == NOT_REGISTERED) {
             client.state = WAIT_ACK_REG;
-            debug_message("INF. -> Sol·licitud de registre enviada. Estat del client: NOT_REGISTERED -> WAIT_ACK_REG");
+            debug_message("INF. -> Sol·licitud de registre (REG_REQ) enviada. Estat del client: NOT_REGISTERED -> WAIT_ACK_REG");
         } else {
-            debug_message("INF. -> Sol·licitud de registre enviada. Estat del client: WAIT_ACK_REG");
+            debug_message("INF. -> Sol·licitud de registre (REG_REQ) enviada. Estat del client: WAIT_ACK_REG");
         }
 
         recv = recvfrom(udp_socket.udp_socket_fd, &received_from_server, sizeof(received_from_server), 0,
@@ -419,9 +419,9 @@ int second_register_req(struct UDPPackage reg_request) {
 
         if (client.state == NOT_REGISTERED) {
             client.state = WAIT_ACK_REG;
-            debug_message("INF. -> Sol·licitud de registre enviada. Estat del client: NOT_REGISTERED -> WAIT_ACK_REG");
+            debug_message("INF. -> Sol·licitud de registre (REG_REQ) enviada. Estat del client: NOT_REGISTERED -> WAIT_ACK_REG");
         } else {
-            debug_message("INF. -> Sol·licitud de registre enviada. Estat del client: WAIT_ACK_REG");
+            debug_message("INF. -> Sol·licitud de registre (REG_REQ) enviada. Estat del client: WAIT_ACK_REG");
         }
 
         recv = recvfrom(udp_socket.udp_socket_fd, &received_from_server, sizeof(received_from_server), 0,
@@ -455,7 +455,6 @@ void udp_package_treatment(struct UDPPackage received_pack) {
         printf("Rebut paquet REG_ACK -> S'enviarà un paquet REG_INFO al servidor\n");
         strcpy(server_data.transmitter_id, received_pack.transmitter_id);
         strcpy(server_data.communication_id, received_pack.communication_id);
-        print_server_data();
 
         send_info_ack();
     } else if(received_pack.package_type == REG_NACK) {
@@ -468,9 +467,16 @@ void udp_package_treatment(struct UDPPackage received_pack) {
         num_reg_pr++;
         register_process(num_reg_pr);
     } else if(received_pack.package_type == INFO_ACK) {
-        printf("Rebut paquet INFO_ACK -> Estat del client: WAIT_ACK_INFO -> REGISTERED\n");
-        debug_message("INF. -> Fase de registre completada amb èxit");
-        client.state = REGISTERED;
+        if(strcmp(received_pack.transmitter_id, server_data.transmitter_id) != 0 || strcmp(received_pack.communication_id, server_data.communication_id) != 0) {
+            printf("ERR. -> Dades del paquet INFO_ACK errònies. S'iniciarà un nou procés de registre.\n");
+            udp_socket.udp_socket_address.sin_port = htons(udp_socket.server_udp);
+            num_reg_pr++;
+            register_process(num_reg_pr);
+        } else {
+            printf("Rebut paquet INFO_ACK -> Estat del client: WAIT_ACK_INFO -> REGISTERED\n");
+            debug_message("INF. -> Fase de registre completada amb èxit");
+            client.state = REGISTERED;
+        }
     } else if(received_pack.package_type == INFO_NACK) {
         printf("Rebut paquet INFO_NACK -> \n");
     } else {
@@ -504,11 +510,11 @@ void send_info_ack() {
         recv = recvfrom(udp_socket.udp_socket_fd, &received_from_server, sizeof(received_from_server), 0,
                         (struct sockaddr *) 0, (socklen_t *) 0);
         print_udp_package(received_from_server);
-        sleep(2 * T);
         if(recv < 0) {
+            sleep(2 * T);
             client.state = NOT_REGISTERED;
             debug_message("INF. -> No s'ha rebut el paquet de confirmació de client: Estat del client: WAIT_ACK_INFO -> NOT_REGISTERED");
-            printf("INF -> S'iniciarà un nou procés de registre: Paquet de confirmació de client NO rebut");
+            printf("INF. -> S'iniciarà un nou procés de registre: Paquet de confirmació de client NO rebut");
             num_reg_pr++;
             register_process(num_reg_pr);
         } else {
