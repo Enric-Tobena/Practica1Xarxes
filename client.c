@@ -130,7 +130,7 @@ int register_loop(struct UDPPackage reg_request);
 int first_P_register_req(struct UDPPackage reg_request);
 int second_register_req(struct UDPPackage reg_request);
 void udp_package_treatment(struct UDPPackage received_pack);
-void send_info_ack();
+void send_reg_info();
 
 void build_client_struct();
 struct UDPPackage build_udp_package(unsigned char, char[], char[], char[]);
@@ -456,9 +456,9 @@ void udp_package_treatment(struct UDPPackage received_pack) {
         strcpy(server_data.transmitter_id, received_pack.transmitter_id);
         strcpy(server_data.communication_id, received_pack.communication_id);
 
-        send_info_ack();
+        send_reg_info();
     } else if(received_pack.package_type == REG_NACK) {
-        printf("Rebut paquet REG_NACK -> Reiniciem l'enviament de paquets de registre\n");
+        printf("Rebut paquet REG_NACK -> Es reiniciarà l'enviament de paquets de registre\n");
         client.state = NOT_REGISTERED;
         register_process(num_reg_pr);
     } else if(received_pack.package_type == REG_REJ) {
@@ -470,6 +470,7 @@ void udp_package_treatment(struct UDPPackage received_pack) {
         if(strcmp(received_pack.transmitter_id, server_data.transmitter_id) != 0 || strcmp(received_pack.communication_id, server_data.communication_id) != 0) {
             printf("ERR. -> Dades del paquet INFO_ACK errònies. S'iniciarà un nou procés de registre.\n");
             udp_socket.udp_socket_address.sin_port = htons(udp_socket.server_udp);
+            client.state = NOT_REGISTERED;
             num_reg_pr++;
             register_process(num_reg_pr);
         } else {
@@ -478,15 +479,24 @@ void udp_package_treatment(struct UDPPackage received_pack) {
             client.state = REGISTERED;
         }
     } else if(received_pack.package_type == INFO_NACK) {
-        printf("Rebut paquet INFO_NACK -> \n");
+        if(strcmp(received_pack.transmitter_id, server_data.transmitter_id) != 0 || strcmp(received_pack.communication_id, server_data.communication_id) != 0) {
+            printf("ERR. -> Dades del paquet INFO_NACK errònies. S'iniciarà un nou procés de registre.\n");
+            num_reg_pr++;
+        } else {
+            printf("Rebut paquet INFO_NACK -> Es reiniciarà l'enviament de paquets de registre.\n");
+            printf("ERR: %s\n", received_pack.data);
+        }
+        client.state = NOT_REGISTERED;
+        udp_socket.udp_socket_address.sin_port = htons(udp_socket.server_udp);
+        register_process(num_reg_pr);
     } else {
-        printf("Rebut paquet no identificat: S'iniciarà un nou procés de registre\n");
+        printf("Rebut paquet UNKNOWN: S'iniciarà un nou procés de registre\n");
         client.state = NOT_REGISTERED;
         register_process(num_reg_pr);
     }
 }
 
-void send_info_ack() {
+void send_reg_info() {
     ssize_t send, recv;
     char data[61];
     sprintf(data, "%d,", tcp_socket.local_tcp);
@@ -514,7 +524,7 @@ void send_info_ack() {
             sleep(2 * T);
             client.state = NOT_REGISTERED;
             debug_message("INF. -> No s'ha rebut el paquet de confirmació de client: Estat del client: WAIT_ACK_INFO -> NOT_REGISTERED");
-            printf("INF. -> S'iniciarà un nou procés de registre: Paquet de confirmació de client NO rebut");
+            printf("INF. -> S'iniciarà un nou procés de registre: Paquet de confirmació de client NO rebut.\n");
             num_reg_pr++;
             register_process(num_reg_pr);
         } else {
