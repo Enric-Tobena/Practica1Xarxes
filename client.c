@@ -136,10 +136,10 @@ void register_process(int num_process);
 int register_loop(struct UDPPackage reg_request);
 int first_P_register_req(struct UDPPackage reg_request);
 int second_register_req(struct UDPPackage reg_request);
-void treat_register_udp_package(struct UDPPackage received_pack);
 void send_reg_info();
 void send_alive_packs();
-
+void treat_register_udp_package(struct UDPPackage received_pack);
+void treat_alive_udp_package(struct UDPPackage received_pack);
 
 void build_client_struct();
 struct UDPPackage build_udp_package(unsigned char, char[], char[], char[]);
@@ -176,7 +176,7 @@ int main(int argc, char *argv[]) {
     setup_tcp_socket();
     setup_udp_socket();
     register_process(num_reg_pr);
-    send_alive_packs();
+    //send_alive_packs();
 }
 
 void parse_args(int argc, char *argv[]) {
@@ -490,6 +490,7 @@ void treat_register_udp_package(struct UDPPackage received_pack) {
             client.state = REGISTERED;
             server_data.tcp_port = atoi(received_pack.data);
             udp_socket.udp_socket_address.sin_port = htons(udp_socket.server_udp);
+            send_alive_packs();
         } else {
             printf("ERR. -> Dades del paquet INFO_ACK errònies. S'iniciarà un nou procés de registre.\n");
             udp_socket.udp_socket_address.sin_port = htons(udp_socket.server_udp);
@@ -562,7 +563,7 @@ void send_alive_packs() {
     int not_received_alives = 0;
 
     struct timeval tmv;
-    tmv.tv_sec = R;
+    tmv.tv_sec = R * V;
     tmv.tv_usec = 0;
 
     ssize_t send, recv;
@@ -589,11 +590,33 @@ void send_alive_packs() {
                 sleep(V);
             } else {            //falta retocar algo de aqui
                 print_udp_package(received_from_server);
-                client.state = SEND_ALIVE;
-                printf("client send alive.\n");
+                treat_alive_udp_package(received_from_server);
                 break;
             }
         }
+    }
+}
+
+void treat_alive_udp_package(struct UDPPackage received_pack) {
+    if(received_pack.package_type == ALIVE) {
+        if(valid_udp_package(received_pack) && strcmp(client.client_id, received_pack.data) == 0) {
+            printf("Rebut paquet ALIVE -> Dades correctes\n");
+            client.state = SEND_ALIVE;
+        } else {
+            printf("ERR. -> Dades del paquet ALIVE errònies. S'iniciarà un nou procés de registre.\n");
+            client.state = NOT_REGISTERED;
+            num_reg_pr++;
+            register_process(num_reg_pr);
+        }
+
+    } else if(received_pack.package_type == ALIVE_NACK) {
+        printf("Rebut paquet ALIVE_NACK ->\n");
+
+    } else if(received_pack.package_type == ALIVE_REJ) {
+        printf("Rebut paquet ALIVE_REJ ->\n");
+
+    } else {
+
     }
 }
 
