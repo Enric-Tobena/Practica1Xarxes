@@ -176,7 +176,6 @@ int main(int argc, char *argv[]) {
     setup_tcp_socket();
     setup_udp_socket();
     register_process(num_reg_pr);
-    //send_alive_packs();
 }
 
 void parse_args(int argc, char *argv[]) {
@@ -349,7 +348,7 @@ void debug_message(char message[]) {
 
 void register_process(int num_process) {
     struct UDPPackage reg_request = build_udp_package(REG_REQ, client.client_id, "0000000000", "");
-    print_udp_package(reg_request);
+    //print_udp_package(reg_request);
 
     int attempts, packages;
     for(attempts = num_process; attempts < O; attempts++) {
@@ -407,7 +406,7 @@ int first_P_register_req(struct UDPPackage reg_request) {
         setsockopt(udp_socket.udp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
         recv = recvfrom(udp_socket.udp_socket_fd, &received_from_server, sizeof(received_from_server), 0,
                         (struct sockaddr *) 0, (socklen_t *) 0);
-        print_udp_package(received_from_server);
+        //print_udp_package(received_from_server);
 
         if(recv > 0) {
             return packages;
@@ -444,7 +443,7 @@ int second_register_req(struct UDPPackage reg_request) {
         setsockopt(udp_socket.udp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
         recv = recvfrom(udp_socket.udp_socket_fd, &received_from_server, sizeof(received_from_server), 0,
                         (struct sockaddr *) 0, (socklen_t *) 0);
-        print_udp_package(received_from_server);
+        //print_udp_package(received_from_server);
 
         if (recv < 0) {
             if(packages == N) {
@@ -486,7 +485,7 @@ void treat_register_udp_package(struct UDPPackage received_pack) {
     } else if(received_pack.package_type == INFO_ACK) {
         if(valid_udp_package(received_pack)) {
             printf("Rebut paquet INFO_ACK -> Estat del client: WAIT_ACK_INFO -> REGISTERED\n");
-            debug_message("INF. -> Fase de registre completada amb èxit");
+            debug_message("INF. -> Inici de la fase d'enviament de paquets ALIVE");
             client.state = REGISTERED;
             server_data.tcp_port = atoi(received_pack.data);
             udp_socket.udp_socket_address.sin_port = htons(udp_socket.server_udp);
@@ -527,7 +526,7 @@ void send_reg_info() {
     strcat(data, client.all_elems);
 
     struct UDPPackage reg_info = build_udp_package(REG_INFO, client.client_id, server_data.communication_id, data);
-    print_udp_package(reg_info);
+    //print_udp_package(reg_info);
 
 
     udp_socket.udp_socket_address.sin_port = htons(atoi(received_from_server.data));
@@ -544,7 +543,7 @@ void send_reg_info() {
         setsockopt(udp_socket.udp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
         recv = recvfrom(udp_socket.udp_socket_fd, &received_from_server, sizeof(received_from_server), 0,
                         (struct sockaddr *) 0, (socklen_t *) 0);
-        print_udp_package(received_from_server);
+        //print_udp_package(received_from_server);
         if(recv < 0) {
             client.state = NOT_REGISTERED;
             debug_message("INF. -> No s'ha rebut el paquet de confirmació de client: Estat del client: WAIT_ACK_INFO -> NOT_REGISTERED");
@@ -587,11 +586,10 @@ void send_alive_packs() {
                     num_reg_pr++;
                     register_process(num_reg_pr);
                 }
-                sleep(V);
             } else {            //falta retocar algo de aqui
-                print_udp_package(received_from_server);
+                //print_udp_package(received_from_server);
+                not_received_alives = 0;
                 treat_alive_udp_package(received_from_server);
-                break;
             }
         }
     }
@@ -602,19 +600,24 @@ void treat_alive_udp_package(struct UDPPackage received_pack) {
         if(valid_udp_package(received_pack) && strcmp(client.client_id, received_pack.data) == 0) {
             printf("Rebut paquet ALIVE -> Dades correctes\n");
             client.state = SEND_ALIVE;
+            debug_message("INF -> Enviament d'ALIVE");
+            sleep(V);
+            //exit(0);        //Substituir el break i treure posteriorment
         } else {
             printf("ERR. -> Dades del paquet ALIVE errònies. S'iniciarà un nou procés de registre.\n");
             client.state = NOT_REGISTERED;
             num_reg_pr++;
             register_process(num_reg_pr);
         }
-
     } else if(received_pack.package_type == ALIVE_NACK) {
-        printf("Rebut paquet ALIVE_NACK ->\n");
-
+        printf("Rebut paquet ALIVE_NACK -> Es reiniciarà l'enviament de paquets de registre.\n");
+        client.state = NOT_REGISTERED;
+        register_process(num_reg_pr);
     } else if(received_pack.package_type == ALIVE_REJ) {
-        printf("Rebut paquet ALIVE_REJ ->\n");
-
+        printf("Rebut paquet ALIVE_REJ -> S'iniciarà un nou procés de registre\n");
+        client.state = NOT_REGISTERED;
+        num_reg_pr++;
+        register_process(num_reg_pr);
     } else {
 
     }
