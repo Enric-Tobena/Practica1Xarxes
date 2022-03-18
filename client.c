@@ -302,7 +302,10 @@ void setup_tcp_socket() {
         exit(-1);
     }
 
+    memset(&tcp_socket.tcp_socket_address, 0, sizeof(struct sockaddr_in));
     tcp_socket.tcp_socket_address.sin_family = AF_INET;
+    tcp_socket.tcp_socket_address.sin_port = htons(0);
+    tcp_socket.tcp_socket_address.sin_addr.s_addr = INADDR_ANY;
 
     debug_message("INF. -> Socket TCP inicialitzat correctament");
 }
@@ -511,6 +514,7 @@ void treat_register_udp_package(struct UDPPackage received_pack) {
     } else {
         printf("Rebut paquet UNKNOWN: S'iniciarà un nou procés de registre\n");
         client.state = NOT_REGISTERED;
+        num_reg_pr++;
         register_process(num_reg_pr);
     }
 }
@@ -560,6 +564,7 @@ void send_reg_info() {
 void send_alive_packs() {
     //print_server_data();
     int not_received_alives = 0;
+    int one = 1;
 
     struct timeval tmv;
     tmv.tv_sec = R * V;
@@ -567,7 +572,7 @@ void send_alive_packs() {
 
     ssize_t send, recv;
     struct UDPPackage alive_pack = build_udp_package(ALIVE, client.client_id, server_data.communication_id, "");
-    while(1) {
+    while(one <= 1) {
         send = sendto(udp_socket.udp_socket_fd, &alive_pack, sizeof(alive_pack), 0,
                       (struct sockaddr *) &udp_socket.udp_socket_address, sizeof(udp_socket.udp_socket_address));
         if (send < 0) {
@@ -586,6 +591,7 @@ void send_alive_packs() {
                     num_reg_pr++;
                     register_process(num_reg_pr);
                 }
+                debug_message("INF. -> Enviament d'ALIVE");
             } else {            //falta retocar algo de aqui
                 //print_udp_package(received_from_server);
                 not_received_alives = 0;
@@ -599,8 +605,13 @@ void treat_alive_udp_package(struct UDPPackage received_pack) {
     if(received_pack.package_type == ALIVE) {
         if(valid_udp_package(received_pack) && strcmp(client.client_id, received_pack.data) == 0) {
             printf("Rebut paquet ALIVE -> Dades correctes\n");
-            client.state = SEND_ALIVE;
-            debug_message("INF -> Enviament d'ALIVE");
+            if(client.state == REGISTERED) {
+                client.state = SEND_ALIVE;
+                tcp_socket.tcp_socket_address.sin_port = htons(server_data.tcp_port);
+                debug_message("INF. -> Estat del client: REGISTERED -> SEND_ALIVE");
+                debug_message("INF. -> Port TCP obert");
+            }
+            debug_message("INF. -> Enviament d'ALIVE");
             sleep(V);
             //exit(0);        //Substituir el break i treure posteriorment
         } else {
@@ -619,7 +630,10 @@ void treat_alive_udp_package(struct UDPPackage received_pack) {
         num_reg_pr++;
         register_process(num_reg_pr);
     } else {
-
+        printf("Rebut paquet UNKNOWN -> S'iniciarà un nou procés de registre\n");
+        client.state = NOT_REGISTERED;
+        num_reg_pr++;
+        register_process(num_reg_pr);
     }
 }
 
@@ -629,17 +643,6 @@ bool valid_udp_package(struct UDPPackage checked_package) {
     } else {
         return false;
     }
-}
-
-struct UDPPackage build_udp_package(unsigned char package_type, char transmitter_id[], char communication_id[], char data[]) {
-    struct UDPPackage udp_package;
-
-    udp_package.package_type = package_type;
-    strcpy(udp_package.transmitter_id, transmitter_id);
-    strcpy(udp_package.communication_id, communication_id);
-    strcpy(udp_package.data, data);
-
-    return udp_package;
 }
 
 struct TCPPackage build_tcp_package(unsigned char package_type, char transmitter_id[], char communication_id[], char elem[], char value[], char info[]) {
@@ -653,6 +656,17 @@ struct TCPPackage build_tcp_package(unsigned char package_type, char transmitter
     strcpy(tcp_package.info, info);
 
     return tcp_package;
+}
+
+struct UDPPackage build_udp_package(unsigned char package_type, char transmitter_id[], char communication_id[], char data[]) {
+    struct UDPPackage udp_package;
+
+    udp_package.package_type = package_type;
+    strcpy(udp_package.transmitter_id, transmitter_id);
+    strcpy(udp_package.communication_id, communication_id);
+    strcpy(udp_package.data, data);
+
+    return udp_package;
 }
 
 void print_client() {
