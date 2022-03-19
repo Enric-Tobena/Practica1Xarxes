@@ -627,8 +627,10 @@ void treat_alive_udp_package(struct UDPPackage received_pack) {
             //exit(0);        //Substituir el break i treure posteriorment
         } else {
             printf("ERR. -> Dades del paquet ALIVE errònies. S'iniciarà un nou procés de registre.\n");
+            if(client.state == SEND_ALIVE) {
+                pthread_cancel(to_read);
+            }
             client.state = NOT_REGISTERED;
-            pthread_cancel(to_read);
             num_reg_pr++;
             register_process(num_reg_pr);
         }
