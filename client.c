@@ -17,10 +17,11 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <bits/types/struct_timeval.h>
+#include <bits/pthreadtypes.h>
+#include <pthread.h>
 
 /* AUXILIARS */
 #define LONG_MESSAGE 128
-#define LONG_DEBUGGER 256
 
 /* FASE DE REGISTRE: Tipus de paquets */
 #define REG_REQ 0xA0 
@@ -118,6 +119,7 @@ struct Server {
 FILE *client_file;
 bool active_debug = false;
 int num_reg_pr = 0;
+pthread_t to_read = (pthread_t) NULL;
 struct Client client;
 struct TCPSocket tcp_socket;
 struct UDPSocket udp_socket;
@@ -140,6 +142,9 @@ void send_reg_info();
 void send_alive_packs();
 void treat_register_udp_package(struct UDPPackage received_pack);
 void treat_alive_udp_package(struct UDPPackage received_pack);
+void *read_commands();
+void print_elems();
+void treat_command(char command[]);
 
 void build_client_struct();
 struct UDPPackage build_udp_package(unsigned char, char[], char[], char[]);
@@ -153,7 +158,6 @@ void print_server_data();
 size_t getline();
 int package_timer(int send_time);
 bool valid_udp_package(struct UDPPackage checked_package);
-
 
 int main(int argc, char *argv[]) {
     if(argc == 3 || argc == 4) {
@@ -427,7 +431,6 @@ int second_register_req(struct UDPPackage reg_request) {
     int p2;
     ssize_t send, recv;
     int packages = P;
-
     for(p2 = P; p2 < N && client.state != REGISTERED; p2++) {  //Des del 3r fins al 8è paquet
         send = sendto(udp_socket.udp_socket_fd, &reg_request, sizeof(reg_request), 0,
                       (struct sockaddr *) &udp_socket.udp_socket_address, sizeof(udp_socket.udp_socket_address));
@@ -457,7 +460,6 @@ int second_register_req(struct UDPPackage reg_request) {
             return packages;
         }
     }
-
     return P;
 }
 
@@ -564,7 +566,6 @@ void send_reg_info() {
 void send_alive_packs() {
     //print_server_data();
     int not_received_alives = 0;
-    int one = 1;
 
     struct timeval tmv;
     tmv.tv_sec = R * V;
@@ -572,7 +573,7 @@ void send_alive_packs() {
 
     ssize_t send, recv;
     struct UDPPackage alive_pack = build_udp_package(ALIVE, client.client_id, server_data.communication_id, "");
-    while(one <= 1) {
+    while(1) {
         send = sendto(udp_socket.udp_socket_fd, &alive_pack, sizeof(alive_pack), 0,
                       (struct sockaddr *) &udp_socket.udp_socket_address, sizeof(udp_socket.udp_socket_address));
         if (send < 0) {
@@ -608,6 +609,7 @@ void treat_alive_udp_package(struct UDPPackage received_pack) {
             if(client.state == REGISTERED) {
                 client.state = SEND_ALIVE;
                 tcp_socket.tcp_socket_address.sin_port = htons(server_data.tcp_port);
+                pthread_create(&to_read, NULL, read_commands, NULL);
                 debug_message("INF. -> Estat del client: REGISTERED -> SEND_ALIVE");
                 debug_message("INF. -> Port TCP obert");
             }
@@ -617,21 +619,25 @@ void treat_alive_udp_package(struct UDPPackage received_pack) {
         } else {
             printf("ERR. -> Dades del paquet ALIVE errònies. S'iniciarà un nou procés de registre.\n");
             client.state = NOT_REGISTERED;
+            pthread_cancel(to_read);
             num_reg_pr++;
             register_process(num_reg_pr);
         }
     } else if(received_pack.package_type == ALIVE_NACK) {
         printf("Rebut paquet ALIVE_NACK -> Es reiniciarà l'enviament de paquets de registre.\n");
         client.state = NOT_REGISTERED;
+        pthread_cancel(to_read);
         register_process(num_reg_pr);
     } else if(received_pack.package_type == ALIVE_REJ) {
         printf("Rebut paquet ALIVE_REJ -> S'iniciarà un nou procés de registre\n");
         client.state = NOT_REGISTERED;
+        pthread_cancel(to_read);
         num_reg_pr++;
         register_process(num_reg_pr);
     } else {
         printf("Rebut paquet UNKNOWN -> S'iniciarà un nou procés de registre\n");
         client.state = NOT_REGISTERED;
+        pthread_cancel(to_read);
         num_reg_pr++;
         register_process(num_reg_pr);
     }
@@ -644,6 +650,38 @@ bool valid_udp_package(struct UDPPackage checked_package) {
         return false;
     }
 }
+void *read_commands() {
+    while(1) {
+        char command[LONG_MESSAGE];
+        fgets(command, LONG_MESSAGE, stdin);
+
+        char *quit_intro = strtok(command, "\n");
+        treat_command(quit_intro);
+    }
+}
+
+void treat_command(char command[]) {
+    printf("*%s*\n", command);
+    if(strcmp("stat", command) == 0) {
+        print_elems();
+    } else if(strcmp("quit", command) == 0){
+        printf("QUIT\n");
+        return;
+    } else {
+        char *token = strtok(command, " \n");
+        if(strcmp("set", token) == 0) {
+            printf("SET\n");                        //Els whiles han de anar dintre dels ifs
+            return;
+        } else if(strcmp("send", token) == 0) {
+            printf("SEND\n");
+            return;
+        } else {
+            printf("%s -> Comanda errònia.\n", token);
+            return;
+        }
+    }
+}
+
 
 struct TCPPackage build_tcp_package(unsigned char package_type, char transmitter_id[], char communication_id[], char elem[], char value[], char info[]) {
     struct TCPPackage tcp_package;
@@ -667,6 +705,15 @@ struct UDPPackage build_udp_package(unsigned char package_type, char transmitter
     strcpy(udp_package.data, data);
 
     return udp_package;
+}
+
+void print_elems() {
+    printf("Elem1: %s\n", client.elem_one);
+    printf("Elem2: %s\n", client.elem_two);
+    printf("Elem3: %s\n", client.elem_three);
+    printf("Elem4: %s\n", client.elem_four);
+    printf("Elem5: %s\n", client.elem_five);
+    putchar('\n');
 }
 
 void print_client() {
