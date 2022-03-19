@@ -88,11 +88,17 @@ struct Client {
     char client_id[11];
     char all_elems[75];
 
-    char elem_one[15];
-    char elem_two[15];
-    char elem_three[15];
-    char elem_four[15];
-    char elem_five[15];
+    char elem_one[8];
+    char elem_two[8];
+    char elem_three[8];
+    char elem_four[8];
+    char elem_five[8];
+
+    char value_one[15];
+    char value_two[15];
+    char value_three[15];
+    char value_four[15];
+    char value_five[15];
 
     int state;
 };
@@ -119,6 +125,7 @@ struct Server {
 FILE *client_file;
 bool active_debug = false;
 int num_reg_pr = 0;
+int read_bugs = 0;
 pthread_t to_read = (pthread_t) NULL;
 struct Client client;
 struct TCPSocket tcp_socket;
@@ -145,6 +152,7 @@ void treat_alive_udp_package(struct UDPPackage received_pack);
 void *read_commands();
 void print_elems();
 void treat_command(char command[]);
+void set_elem_value(char id_elem[], char new_value[]);
 
 void build_client_struct();
 struct UDPPackage build_udp_package(unsigned char, char[], char[], char[]);
@@ -158,6 +166,7 @@ void print_server_data();
 size_t getline();
 int package_timer(int send_time);
 bool valid_udp_package(struct UDPPackage checked_package);
+bool valid_elem_id(char id_elem[]);
 
 int main(int argc, char *argv[]) {
     if(argc == 3 || argc == 4) {
@@ -605,7 +614,7 @@ void send_alive_packs() {
 void treat_alive_udp_package(struct UDPPackage received_pack) {
     if(received_pack.package_type == ALIVE) {
         if(valid_udp_package(received_pack) && strcmp(client.client_id, received_pack.data) == 0) {
-            printf("Rebut paquet ALIVE -> Dades correctes\n");
+            debug_message("INF -> Rebut paquet ALIVE -> Dades correctes");
             if(client.state == REGISTERED) {
                 client.state = SEND_ALIVE;
                 tcp_socket.tcp_socket_address.sin_port = htons(server_data.tcp_port);
@@ -650,18 +659,20 @@ bool valid_udp_package(struct UDPPackage checked_package) {
         return false;
     }
 }
+
 void *read_commands() {
     while(1) {
         char command[LONG_MESSAGE];
         fgets(command, LONG_MESSAGE, stdin);
 
         char *quit_intro = strtok(command, "\n");
-        treat_command(quit_intro);
+        if(quit_intro != NULL) {
+            treat_command(quit_intro);
+        }
     }
 }
 
 void treat_command(char command[]) {
-    printf("*%s*\n", command);
     if(strcmp("stat", command) == 0) {
         print_elems();
     } else if(strcmp("quit", command) == 0){
@@ -670,18 +681,61 @@ void treat_command(char command[]) {
     } else {
         char *token = strtok(command, " \n");
         if(strcmp("set", token) == 0) {
-            printf("SET\n");                        //Els whiles han de anar dintre dels ifs
+            int i = 0;
+            char id_elem[15];
+            char new_value[15];
+            token = strtok(NULL, " \n");
+            while(token != NULL) {
+                if(i == 0) {
+                    strcpy(id_elem, token);
+                } else if(i == 1) {
+                    strcpy(new_value, token);
+                }
+
+                token = strtok(NULL, " \n");
+                i++;
+            }
+
+            if(i == 2) {
+                set_elem_value(id_elem, new_value);
+            } else {
+                printf("Ús: set <identificador_element> <nou_valor>.\n");
+            }
             return;
         } else if(strcmp("send", token) == 0) {
             printf("SEND\n");
             return;
         } else {
-            printf("%s -> Comanda errònia.\n", token);
+            printf("*%s* -> Comanda errònia.\n", token);
             return;
         }
     }
 }
 
+void set_elem_value(char id_elem[], char new_value[]) {
+    if(!valid_elem_id(id_elem)) {
+        printf("%s -> Identificador no vàlid.\n", id_elem);
+    } else {
+        if(strcmp(client.elem_one, id_elem) == 0) {
+            strcpy(client.value_one, new_value);
+        } else if(strcmp(client.elem_two, id_elem) == 0) {
+            strcpy(client.value_two, new_value);
+        } else if(strcmp(client.elem_three, id_elem) == 0) {
+            strcpy(client.value_three, new_value);
+        } else if(strcmp(client.elem_four, id_elem) == 0) {
+            strcpy(client.value_four, new_value);
+        } else if(strcmp(client.elem_five, id_elem) == 0) {
+            strcpy(client.value_five, new_value);
+        }
+
+        printf("Valor de l'element %s canviat amb èxit.\n", id_elem);
+    }
+}
+
+bool valid_elem_id(char id_elem[]) {
+   return strcmp(client.elem_one, id_elem) == 0 || strcmp(client.elem_two, id_elem) == 0 || strcmp(client.elem_three, id_elem) == 0 ||
+           strcmp(client.elem_four, id_elem) == 0 || strcmp(client.elem_five, id_elem) == 0;
+}
 
 struct TCPPackage build_tcp_package(unsigned char package_type, char transmitter_id[], char communication_id[], char elem[], char value[], char info[]) {
     struct TCPPackage tcp_package;
@@ -708,12 +762,13 @@ struct UDPPackage build_udp_package(unsigned char package_type, char transmitter
 }
 
 void print_elems() {
-    printf("Elem1: %s\n", client.elem_one);
-    printf("Elem2: %s\n", client.elem_two);
-    printf("Elem3: %s\n", client.elem_three);
-    printf("Elem4: %s\n", client.elem_four);
-    printf("Elem5: %s\n", client.elem_five);
-    putchar('\n');
+    printf("ELEMENT   VALUE\n");
+    printf("-------   -------\n");
+    printf("%s    %s\n", client.elem_one, client.value_one);
+    printf("%s    %s\n", client.elem_two, client.value_two);
+    printf("%s    %s\n", client.elem_three, client.value_three);
+    printf("%s    %s\n", client.elem_four, client.value_four);
+    printf("%s    %s\n", client.elem_five, client.value_five);
 }
 
 void print_client() {
@@ -722,11 +777,7 @@ void print_client() {
     printf("State: 0x%0X\n", client.state);
     printf("Local-TCP: %i\n", tcp_socket.local_tcp);
     printf("AllElems: %s\n", client.all_elems);
-    printf("Elem1: %s\n", client.elem_one);
-    printf("Elem2: %s\n", client.elem_two);
-    printf("Elem3: %s\n", client.elem_three);
-    printf("Elem4: %s\n", client.elem_four);
-    printf("Elem5: %s\n", client.elem_five);
+    print_elems();
     printf("Server: %s\n", server_data.server_ip);
     printf("Server-UDP: %i\n", udp_socket.server_udp);
     putchar('\n');
