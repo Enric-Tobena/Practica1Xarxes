@@ -131,7 +131,6 @@ int num_reg_pr = 0;
 char actual_elem[8];
 char actual_value[16];
 pthread_t to_read = (pthread_t) NULL;
-pthread_t to_send_data = (pthread_t) NULL;
 
 struct Client client;
 struct TCPSocket tcp_socket;
@@ -161,7 +160,7 @@ void print_elems();
 void treat_command(char command[]);
 void disconnect_client();
 void set_elem_value(char id_elem[], char new_value[]);
-void *send_tcp_data_package();
+void send_tcp_data_package();
 char *associated_value(char id_elem[]);
 
 void build_client_struct();
@@ -731,7 +730,7 @@ void treat_command(char command[]) {
                 if(valid_elem_id(id_elem)) {
                     strcpy(actual_elem, id_elem);
                     strcpy(actual_value, associated_value(id_elem));
-                    pthread_create(&to_send_data, NULL, send_tcp_data_package, NULL);
+                    send_tcp_data_package();
                     return;
                 } else {
                     printf("%s -> Identificador no vàlid.\n", id_elem);
@@ -784,37 +783,33 @@ void set_elem_value(char id_elem[], char new_value[]) {
     }
 }
 
-void *send_tcp_data_package() {
-    while(1) {
-        struct timeval tmv;
-        tmv.tv_sec = M;
-        tmv.tv_usec = 0;
+void send_tcp_data_package() {
+    struct timeval tmv;
+    tmv.tv_sec = M;
+    tmv.tv_usec = 0;
 
-        ssize_t send, recv;
+    ssize_t send, recv;
 
-        char date[80];
-        time_t t = time(NULL);
-        struct tm *tmp = localtime(&t);
-        strftime(date, 80, "%Y-%m-%d;%H:%M:%S", tmp);
+    char date[80];
+    time_t t = time(NULL);
+    struct tm *tmp = localtime(&t);
+    strftime(date, 80, "%Y-%m-%d;%H:%M:%S", tmp);
 
-        struct TCPPackage send_tcp_data = build_tcp_package(SEND_DATA, client.client_id, server_data.communication_id,
-                                                            actual_elem, actual_value, date);
-        print_tcp_package(send_tcp_data);
+    struct TCPPackage send_tcp_data = build_tcp_package(SEND_DATA, client.client_id, server_data.communication_id, actual_elem, actual_value, date);
+    print_tcp_package(send_tcp_data);
 
-        send = sendto(tcp_socket.tcp_socket_fd, &send_tcp_data, sizeof(send_tcp_data), 0,
-                      (struct sockaddr *) &tcp_socket.tcp_socket_address, sizeof(tcp_socket.tcp_socket_address));
-        if (send < 0) {
-            printf("Error d'enviament del paquet SEND_DATA");
-        }
-
-        setsockopt(tcp_socket.tcp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
-        recv = recvfrom(tcp_socket.tcp_socket_fd, &received_tcp_from_server, sizeof(received_tcp_from_server), 0,
-                        (struct sockaddr *) 0, (socklen_t *) 0);
-
-        if (recv > 0) {
-            print_tcp_package(received_tcp_from_server);
-        }
+    send = sendto(tcp_socket.tcp_socket_fd, &send_tcp_data, sizeof(send_tcp_data), 0,
+                  (struct sockaddr *) &tcp_socket.tcp_socket_address, sizeof(tcp_socket.tcp_socket_address));
+    if (send < 0) {
+        printf("Error d'enviament del paquet SEND_DATA");
     }
+
+    setsockopt(tcp_socket.tcp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
+    recv = recvfrom(tcp_socket.tcp_socket_fd, &received_tcp_from_server, sizeof(received_tcp_from_server), 0,
+                    (struct sockaddr *) 0, (socklen_t *) 0);
+
+    printf("%li", recv);
+    print_tcp_package(received_tcp_from_server);
 
 }
 
