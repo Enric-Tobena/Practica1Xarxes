@@ -68,6 +68,9 @@
 #define R 2
 #define S 3
 
+/* ENVIAMENT DE PAQUETS TCP */
+#define M 3
+
 struct TCPPackage {
     unsigned char package_type;
     char transmitter_id[11];
@@ -94,11 +97,11 @@ struct Client {
     char elem_four[8];
     char elem_five[8];
 
-    char value_one[15];
-    char value_two[15];
-    char value_three[15];
-    char value_four[15];
-    char value_five[15];
+    char value_one[16];
+    char value_two[16];
+    char value_three[16];
+    char value_four[16];
+    char value_five[16];
 
     int state;
 };
@@ -125,14 +128,18 @@ struct Server {
 FILE *client_file;
 bool active_debug = false;
 int num_reg_pr = 0;
-int read_bugs = 0;
+char actual_elem[8];
+char actual_value[16];
 pthread_t to_read = (pthread_t) NULL;
+pthread_t to_send_data = (pthread_t) NULL;
+
 struct Client client;
 struct TCPSocket tcp_socket;
 struct UDPSocket udp_socket;
 struct Server server_data;
 
-struct UDPPackage received_from_server;
+struct UDPPackage received_udp_from_server;
+struct TCPPackage received_tcp_from_server;
 
 /* FUNCIONS PRINCIPALS */
 void parse_args(int argc, char *argv[]);
@@ -154,7 +161,8 @@ void print_elems();
 void treat_command(char command[]);
 void disconnect_client();
 void set_elem_value(char id_elem[], char new_value[]);
-void send_tcp_data_package();
+void *send_tcp_data_package();
+char *associated_value(char id_elem[]);
 
 void build_client_struct();
 struct UDPPackage build_udp_package(unsigned char, char[], char[], char[]);
@@ -385,7 +393,7 @@ void register_process(int num_process) {
         printf("ERR. -> No s'ha pogut establir connexió amb el servidor.\n");
         exit(EXIT_FAILURE);
     } else {
-        treat_register_udp_package(received_from_server);
+        treat_register_udp_package(received_udp_from_server);
     }
 }
 
@@ -422,9 +430,9 @@ int first_P_register_req(struct UDPPackage reg_request) {
         }
 
         setsockopt(udp_socket.udp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
-        recv = recvfrom(udp_socket.udp_socket_fd, &received_from_server, sizeof(received_from_server), 0,
+        recv = recvfrom(udp_socket.udp_socket_fd, &received_udp_from_server, sizeof(received_udp_from_server), 0,
                         (struct sockaddr *) 0, (socklen_t *) 0);
-        //print_udp_package(received_from_server);
+        print_udp_package(received_udp_from_server);
 
         if(recv > 0) {
             return packages;
@@ -458,9 +466,9 @@ int second_register_req(struct UDPPackage reg_request) {
         }
 
         setsockopt(udp_socket.udp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
-        recv = recvfrom(udp_socket.udp_socket_fd, &received_from_server, sizeof(received_from_server), 0,
+        recv = recvfrom(udp_socket.udp_socket_fd, &received_udp_from_server, sizeof(received_udp_from_server), 0,
                         (struct sockaddr *) 0, (socklen_t *) 0);
-        //print_udp_package(received_from_server);
+        //print_udp_package(received_udp_from_server);
 
         if (recv < 0) {
             if(packages == N) {
@@ -546,7 +554,7 @@ void send_reg_info() {
     //print_udp_package(reg_info);
 
 
-    udp_socket.udp_socket_address.sin_port = htons(atoi(received_from_server.data));
+    udp_socket.udp_socket_address.sin_port = htons(atoi(received_udp_from_server.data));
     send = sendto(udp_socket.udp_socket_fd, &reg_info, sizeof(reg_info), 0,
                       (struct sockaddr *) &udp_socket.udp_socket_address, sizeof(udp_socket.udp_socket_address));
     if(send < 0) {
@@ -558,9 +566,9 @@ void send_reg_info() {
         }
 
         setsockopt(udp_socket.udp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
-        recv = recvfrom(udp_socket.udp_socket_fd, &received_from_server, sizeof(received_from_server), 0,
+        recv = recvfrom(udp_socket.udp_socket_fd, &received_udp_from_server, sizeof(received_udp_from_server), 0,
                         (struct sockaddr *) 0, (socklen_t *) 0);
-        //print_udp_package(received_from_server);
+        //print_udp_package(received_udp_from_server);
         if(recv < 0) {
             client.state = NOT_REGISTERED;
             debug_message("INF. -> No s'ha rebut el paquet de confirmació de client: Estat del client: WAIT_ACK_INFO -> NOT_REGISTERED");
@@ -569,7 +577,7 @@ void send_reg_info() {
             num_reg_pr++;
             register_process(num_reg_pr);
         } else {
-            treat_register_udp_package(received_from_server);
+            treat_register_udp_package(received_udp_from_server);
         }
     }
 }
@@ -591,7 +599,7 @@ void send_alive_packs() {
             perror("Error al enviar el paquet ALIVE al servidor. ERR. -> mètode sendto()");
         } else {
             setsockopt(udp_socket.udp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
-            recv = recvfrom(udp_socket.udp_socket_fd, &received_from_server, sizeof(received_from_server), 0,
+            recv = recvfrom(udp_socket.udp_socket_fd, &received_udp_from_server, sizeof(received_udp_from_server), 0,
                             (struct sockaddr *) 0, (socklen_t *) 0);
             if (recv < 0) {
                 not_received_alives++;
@@ -605,9 +613,9 @@ void send_alive_packs() {
                 }
                 debug_message("INF. -> Enviament d'ALIVE");
             } else {            //falta retocar algo de aqui
-                //print_udp_package(received_from_server);
+                //print_udp_package(received_udp_from_server);
                 not_received_alives = 0;
-                treat_alive_udp_package(received_from_server);
+                treat_alive_udp_package(received_udp_from_server);
             }
         }
     }
@@ -720,7 +728,15 @@ void treat_command(char command[]) {
             }
 
             if(j == 1) {
-                printf("SEND\n");
+                if(valid_elem_id(id_elem)) {
+                    strcpy(actual_elem, id_elem);
+                    strcpy(actual_value, associated_value(id_elem));
+                    pthread_create(&to_send_data, NULL, send_tcp_data_package, NULL);
+                    return;
+                } else {
+                    printf("%s -> Identificador no vàlid.\n", id_elem);
+                    return;
+                }
             } else {
                 printf("Ús: send <identificador_element>.\n");
             }
@@ -768,8 +784,54 @@ void set_elem_value(char id_elem[], char new_value[]) {
     }
 }
 
-void send_tcp_data_package() {
+void *send_tcp_data_package() {
+    while(1) {
+        struct timeval tmv;
+        tmv.tv_sec = M;
+        tmv.tv_usec = 0;
 
+        ssize_t send, recv;
+
+        char date[80];
+        time_t t = time(NULL);
+        struct tm *tmp = localtime(&t);
+        strftime(date, 80, "%Y-%m-%d;%H:%M:%S", tmp);
+
+        struct TCPPackage send_tcp_data = build_tcp_package(SEND_DATA, client.client_id, server_data.communication_id,
+                                                            actual_elem, actual_value, date);
+        print_tcp_package(send_tcp_data);
+
+        send = sendto(tcp_socket.tcp_socket_fd, &send_tcp_data, sizeof(send_tcp_data), 0,
+                      (struct sockaddr *) &tcp_socket.tcp_socket_address, sizeof(tcp_socket.tcp_socket_address));
+        if (send < 0) {
+            printf("Error d'enviament del paquet SEND_DATA");
+        }
+
+        setsockopt(tcp_socket.tcp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
+        recv = recvfrom(tcp_socket.tcp_socket_fd, &received_tcp_from_server, sizeof(received_tcp_from_server), 0,
+                        (struct sockaddr *) 0, (socklen_t *) 0);
+
+        if (recv > 0) {
+            print_tcp_package(received_tcp_from_server);
+        }
+    }
+
+}
+
+char *associated_value(char id_elem[]) {
+    if(strcmp(client.elem_one, id_elem) == 0) {
+        return client.value_one;
+    } else if(strcmp(client.elem_two, id_elem) == 0) {
+        return client.value_two;
+    } else if(strcmp(client.elem_three, id_elem) == 0) {
+        return client.value_three;
+    } else if(strcmp(client.elem_four, id_elem) == 0) {
+        return client.value_four;
+    } else if(strcmp(client.elem_five, id_elem) == 0) {
+        return client.value_five;
+    }
+
+    return NULL;
 }
 
 bool valid_elem_id(char id_elem[]) {
