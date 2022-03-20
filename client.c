@@ -152,7 +152,9 @@ void treat_alive_udp_package(struct UDPPackage received_pack);
 void *read_commands();
 void print_elems();
 void treat_command(char command[]);
+void disconnect_client();
 void set_elem_value(char id_elem[], char new_value[]);
+void send_tcp_data_package();
 
 void build_client_struct();
 struct UDPPackage build_udp_package(unsigned char, char[], char[], char[]);
@@ -678,7 +680,7 @@ void treat_command(char command[]) {
     if(strcmp("stat", command) == 0) {
         print_elems();
     } else if(strcmp("quit", command) == 0){
-        printf("QUIT\n");
+        disconnect_client();
         return;
     } else {
         char *token = strtok(command, " \n");
@@ -705,12 +707,44 @@ void treat_command(char command[]) {
             }
             return;
         } else if(strcmp("send", token) == 0) {
-            printf("SEND\n");
+            int j = 0;
+            char id_elem[15];
+            token = strtok(NULL, " \n");
+            while(token != NULL) {
+                if(j == 0) {
+                    strcpy(id_elem, token);
+                }
+
+                token = strtok(NULL, " \n");
+                j++;
+            }
+
+            if(j == 1) {
+                printf("SEND\n");
+            } else {
+                printf("Ús: send <identificador_element>.\n");
+            }
             return;
         } else {
             printf("*%s* -> Comanda errònia.\n", token);
             return;
         }
+    }
+}
+
+void disconnect_client() {
+    if(client.state == SEND_ALIVE) {
+        close(tcp_socket.tcp_socket_fd);
+        close(udp_socket.udp_socket_fd);
+        close(tcp_socket.local_tcp);
+        close(udp_socket.server_udp);
+
+        close(server_data.tcp_port);
+
+        printf("INF -> Dispositiu amb id: %s desconnectat amb èxit.\n", client.client_id);
+        exit(EXIT_SUCCESS);
+    } else {
+        printf("ERR. -> Estat del client no és SEND_ALIVE i no es pot executar la comanda 'quit'.\n");
     }
 }
 
@@ -730,8 +764,12 @@ void set_elem_value(char id_elem[], char new_value[]) {
             strcpy(client.value_five, new_value);
         }
 
-        printf("Valor de l'element %s canviat amb èxit.\n", id_elem);
+        printf("INF -> Valor de l'element %s canviat amb èxit.\n", id_elem);
     }
+}
+
+void send_tcp_data_package() {
+
 }
 
 bool valid_elem_id(char id_elem[]) {
