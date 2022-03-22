@@ -104,6 +104,7 @@ struct Client {
     char value_five[16];
 
     int state;
+    struct sockaddr_in client_address;
 };
 
 struct TCPSocket {
@@ -195,7 +196,6 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
 
-    setup_tcp_socket();
     setup_udp_socket();
     register_process(num_reg_pr);
 }
@@ -312,22 +312,29 @@ void setup_tcp_socket() {
         exit(-1);
     }
 
-    if(bind(tcp_socket.tcp_socket_fd, (struct sockaddr *) &tcp_socket.tcp_socket_address, sizeof(tcp_socket.tcp_socket_address)) < 0) {
-        perror("Error al inicialitzar el socket TCP: ERR. -> mètode bind()");
-        close(tcp_socket.tcp_socket_fd);
+    struct hostent *host = gethostbyname(server_data.server_ip);
+    if(!host) {
+        printf("Error: Servidor no trobat");
         exit(-1);
     }
 
-    if(connect(tcp_socket.tcp_socket_fd, (struct sockaddr *) &tcp_socket.tcp_socket_address, sizeof(tcp_socket.tcp_socket_address)) < 0) {
-        perror("Error al inicialitzar el socket TCP: ERR. -> mètode connect()");
+
+    if(bind(tcp_socket.tcp_socket_fd, (struct sockaddr *) &client.client_address, sizeof(client.client_address)) < 0) {
+        perror("Error al inicialitzar el socket TCP: ERR. -> mètode bind()");
         close(tcp_socket.tcp_socket_fd);
         exit(-1);
     }
 
     memset(&tcp_socket.tcp_socket_address, 0, sizeof(struct sockaddr_in));
     tcp_socket.tcp_socket_address.sin_family = AF_INET;
-    tcp_socket.tcp_socket_address.sin_port = htons(0);
-    tcp_socket.tcp_socket_address.sin_addr.s_addr = INADDR_ANY;
+    tcp_socket.tcp_socket_address.sin_port = htons(server_data.tcp_port);
+    tcp_socket.tcp_socket_address.sin_addr.s_addr = ((struct in_addr *) host->h_addr_list[0])->s_addr;
+
+    if(connect(tcp_socket.tcp_socket_fd, (struct sockaddr *) &tcp_socket.tcp_socket_address, sizeof(tcp_socket.tcp_socket_address)) < 0) {
+        perror("Error al inicialitzar el socket TCP: ERR. -> mètode connect()");
+        close(tcp_socket.tcp_socket_fd);
+        exit(-1);
+    }
 
     debug_message("INF. -> Socket TCP inicialitzat correctament");
 }
@@ -340,7 +347,12 @@ void setup_udp_socket() {
         exit(-1);
     }
 
-    if(bind(udp_socket.udp_socket_fd, (struct sockaddr *) &udp_socket.udp_socket_address, sizeof(udp_socket.udp_socket_address)) < 0) {
+    memset(&client.client_address, 0, sizeof(struct sockaddr_in));
+    client.client_address.sin_family = AF_INET;
+    client.client_address.sin_port = htons(0);
+    client.client_address.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    if(bind(udp_socket.udp_socket_fd, (struct sockaddr *) &client.client_address, sizeof(client.client_address)) < 0) {
         perror("Error al inicialitzar el socket UDP: ERR. -> mètode bind()");
         close(udp_socket.udp_socket_fd);
         exit(-1);
@@ -355,7 +367,7 @@ void setup_udp_socket() {
     memset(&udp_socket.udp_socket_address, 0, sizeof(struct sockaddr_in));
     udp_socket.udp_socket_address.sin_family = AF_INET;
     udp_socket.udp_socket_address.sin_port = htons(udp_socket.server_udp);
-    udp_socket.udp_socket_address.sin_addr.s_addr = INADDR_ANY;
+    udp_socket.udp_socket_address.sin_addr.s_addr = htonl(INADDR_ANY);
 
     debug_message("INF. -> Socket UDP inicialitzat correctament");
 }
@@ -582,7 +594,7 @@ void send_reg_info() {
 }
 
 void send_alive_packs() {
-    //print_server_data();
+    print_server_data();
     int not_received_alives = 0;
 
     struct timeval tmv;
@@ -626,7 +638,7 @@ void treat_alive_udp_package(struct UDPPackage received_pack) {
             debug_message("INF -> Rebut paquet ALIVE -> Dades correctes");
             if(client.state == REGISTERED) {
                 client.state = SEND_ALIVE;
-                tcp_socket.tcp_socket_address.sin_port = htons(server_data.tcp_port);
+                setup_tcp_socket();
                 pthread_create(&to_read, NULL, read_commands, NULL);
                 debug_message("INF. -> Estat del client: REGISTERED -> SEND_ALIVE");
                 debug_message("INF. -> Port TCP obert");
@@ -788,7 +800,7 @@ void send_tcp_data_package() {
     tmv.tv_sec = M;
     tmv.tv_usec = 0;
 
-    ssize_t send, recv;
+    ssize_t send_p, recv_p = -1;
 
     char date[80];
     time_t t = time(NULL);
@@ -798,18 +810,21 @@ void send_tcp_data_package() {
     struct TCPPackage send_tcp_data = build_tcp_package(SEND_DATA, client.client_id, server_data.communication_id, actual_elem, actual_value, date);
     print_tcp_package(send_tcp_data);
 
-    send = sendto(tcp_socket.tcp_socket_fd, &send_tcp_data, sizeof(send_tcp_data), 0,
-                  (struct sockaddr *) &tcp_socket.tcp_socket_address, sizeof(tcp_socket.tcp_socket_address));
-    if (send < 0) {
-        printf("Error d'enviament del paquet SEND_DATA");
+    send_p = sendto(tcp_socket.tcp_socket_fd, &send_tcp_data, sizeof(send_tcp_data), 0, (struct sockaddr*) &tcp_socket.tcp_socket_address, sizeof(tcp_socket.tcp_socket_fd));
+
+    if(send_p < 0) {
+        perror("Error al enviar el paquet SEND_DATA al servidor. ERR. -> mètode send()");
     }
 
     setsockopt(tcp_socket.tcp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
-    recv = recvfrom(tcp_socket.tcp_socket_fd, &received_tcp_from_server, sizeof(received_tcp_from_server), 0,
-                    (struct sockaddr *) 0, (socklen_t *) 0);
+    recv_p = recvfrom(tcp_socket.tcp_socket_fd, &received_tcp_from_server, sizeof(received_tcp_from_server), 0, (struct sockaddr *) 0, (socklen_t *) 0);
 
-    printf("%li", recv);
-    print_tcp_package(received_tcp_from_server);
+    if(recv_p < 0) {
+        printf("Paquet mal rebut.\n");
+    } else {
+        printf("PAQUET REBUT::.\n");
+        print_tcp_package(received_tcp_from_server);
+    }
 
 }
 
