@@ -163,6 +163,7 @@ void disconnect_client();
 void set_elem_value(char id_elem[], char new_value[]);
 void send_tcp_data_package();
 char *associated_value(char id_elem[]);
+void treat_data_tcp_package(struct TCPPackage received_pack);
 
 void build_client_struct();
 struct UDPPackage build_udp_package(unsigned char, char[], char[], char[]);
@@ -177,6 +178,7 @@ size_t getline();
 int package_timer(int send_time);
 bool valid_udp_package(struct UDPPackage checked_package);
 bool valid_elem_id(char id_elem[]);
+bool valid_tcp_package(struct TCPPackage checked_package);
 
 int main(int argc, char *argv[]) {
     if(argc == 3 || argc == 4) {
@@ -196,7 +198,6 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
 
-    setup_udp_socket();
     register_process(num_reg_pr);
 }
 
@@ -377,6 +378,7 @@ void debug_message(char message[]) {
 }
 
 void register_process(int num_process) {
+    setup_udp_socket();
     struct UDPPackage reg_request = build_udp_package(REG_REQ, client.client_id, "0000000000", "");
     //print_udp_package(reg_request);
 
@@ -802,7 +804,6 @@ void send_tcp_data_package() {
     struct TCPPackage send_tcp_data = build_tcp_package(SEND_DATA, client.client_id, server_data.communication_id, actual_elem, actual_value, date);
     print_tcp_package(send_tcp_data);
 
-
     setup_tcp_socket();
     send_p = send(tcp_socket.tcp_socket_fd, &send_tcp_data, sizeof(send_tcp_data), 0);
 
@@ -810,15 +811,52 @@ void send_tcp_data_package() {
         perror("Error al enviar el paquet SEND_DATA al servidor. ERR. -> mètode send()");
     }
 
-    setsockopt(tcp_socket.tcp_socket_fd, SOCK_STREAM, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
+    setsockopt(tcp_socket.tcp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
     recv_p = recv(tcp_socket.tcp_socket_fd, &received_tcp_from_server, sizeof(received_tcp_from_server), 0);
     if(recv_p < 0) {
-        perror("Paquet mal rebut.\n");
+        printf("Timeout del socket TCP esgotat -> Dades no acceptades. S'iniciarà un nou procés de registre.\n");
+        pthread_cancel(to_read);
+        close(udp_socket.udp_socket_fd);
+        close(tcp_socket.tcp_socket_fd);
+        num_reg_pr++;
+        register_process(num_reg_pr);
     } else {
-        printf("PAQUET REBUT::.\n");
         print_tcp_package(received_tcp_from_server);
+        treat_data_tcp_package(received_tcp_from_server);
     }
 
+}
+
+void treat_data_tcp_package(struct TCPPackage received_pack) {
+    if(received_pack.package_type == DATA_ACK) {
+        if(valid_tcp_package(received_pack)) {
+            printf("Rebut paquet DATA_ACK -> Enviament d'informació acceptat.\n");
+        } else {
+            printf("Dades del paquet DATA_ACK errònies. -> S'iniciarà un nou procés de registre.\n");
+            client.state = NOT_REGISTERED;
+            pthread_cancel(to_read);
+            close(udp_socket.udp_socket_fd);
+            close(tcp_socket.tcp_socket_fd);
+            num_reg_pr++;
+            register_process(num_reg_pr);
+        }
+    } else if(received_pack.package_type == DATA_NACK) {
+        printf("Rebut paquet DATA_NACK -> Error al emmagatzemar les dades o dades errònies.\n");
+    } else if(received_pack.package_type == DATA_REJ) {
+        printf("Rebut paquet DATA_REJ -> Informació rebutjada. S'obrirà un nou procés de registre.\n");
+        client.state = NOT_REGISTERED;
+        pthread_cancel(to_read);
+        close(udp_socket.udp_socket_fd);
+        close(tcp_socket.tcp_socket_fd);
+        num_reg_pr++;
+        register_process(num_reg_pr);
+    } else if(received_pack.package_type == SET_DATA) {
+        printf("Rebut paquet SET_DATA\n");
+    } else if(received_pack.package_type == GET_DATA) {
+        printf("Rebut paquet GET_DATA\n");
+    } else {
+        printf("Rebut paquet UNKNOWN\n");
+    }
 }
 
 char *associated_value(char id_elem[]) {
@@ -840,6 +878,11 @@ char *associated_value(char id_elem[]) {
 bool valid_elem_id(char id_elem[]) {
    return strcmp(client.elem_one, id_elem) == 0 || strcmp(client.elem_two, id_elem) == 0 || strcmp(client.elem_three, id_elem) == 0 ||
            strcmp(client.elem_four, id_elem) == 0 || strcmp(client.elem_five, id_elem) == 0;
+}
+
+bool valid_tcp_package(struct TCPPackage checked_package) {
+    return strcmp(checked_package.communication_id, server_data.communication_id) == 0 && valid_elem_id(checked_package.elem)
+            && strcmp(client.client_id, checked_package.info) == 0;
 }
 
 struct TCPPackage build_tcp_package(unsigned char package_type, char transmitter_id[], char communication_id[], char elem[], char value[], char info[]) {
