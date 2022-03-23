@@ -598,7 +598,7 @@ void send_alive_packs() {
 
     ssize_t send, recv;
     struct UDPPackage alive_pack = build_udp_package(ALIVE, client.client_id, server_data.communication_id, "");
-    while(1) {
+    while((client.state == REGISTERED || client.state == SEND_ALIVE) != 0) {
         send = sendto(udp_socket.udp_socket_fd, &alive_pack, sizeof(alive_pack), 0,
                       (struct sockaddr *) &udp_socket.udp_socket_address, sizeof(udp_socket.udp_socket_address));
         if (send < 0) {
@@ -642,9 +642,6 @@ void treat_alive_udp_package(struct UDPPackage received_pack) {
             //exit(0);        //Substituir el break i treure posteriorment
         } else {
             printf("ERR. -> Dades del paquet ALIVE errònies. S'iniciarà un nou procés de registre.\n");
-            if(client.state == SEND_ALIVE) {
-                pthread_cancel(to_read);
-            }
             client.state = NOT_REGISTERED;
             num_reg_pr++;
             register_process(num_reg_pr);
@@ -815,9 +812,6 @@ void send_tcp_data_package() {
     recv_p = recv(tcp_socket.tcp_socket_fd, &received_tcp_from_server, sizeof(received_tcp_from_server), 0);
     if(recv_p < 0) {
         printf("Timeout del socket TCP esgotat -> Dades no acceptades. S'iniciarà un nou procés de registre.\n");
-        pthread_cancel(to_read);
-        close(udp_socket.udp_socket_fd);
-        close(tcp_socket.tcp_socket_fd);
         num_reg_pr++;
         register_process(num_reg_pr);
     } else {
@@ -834,9 +828,6 @@ void treat_data_tcp_package(struct TCPPackage received_pack) {
         } else {
             printf("Dades del paquet DATA_ACK errònies. -> S'iniciarà un nou procés de registre.\n");
             client.state = NOT_REGISTERED;
-            pthread_cancel(to_read);
-            close(udp_socket.udp_socket_fd);
-            close(tcp_socket.tcp_socket_fd);
             num_reg_pr++;
             register_process(num_reg_pr);
         }
