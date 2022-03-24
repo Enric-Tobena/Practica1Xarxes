@@ -129,8 +129,6 @@ struct Server {
 FILE *client_file;
 bool active_debug = false;
 int num_reg_pr = 0;
-char actual_elem[8];
-char actual_value[16];
 pthread_t to_read = (pthread_t) NULL;
 
 struct Client client;
@@ -161,7 +159,7 @@ void print_elems();
 void treat_command(char command[]);
 void disconnect_client();
 void set_elem_value(char id_elem[], char new_value[]);
-void send_tcp_data_package();
+void send_tcp_data_package(char id_elem[]);
 char *associated_value(char id_elem[]);
 void treat_data_tcp_package(struct TCPPackage received_pack);
 
@@ -711,7 +709,11 @@ void treat_command(char command[]) {
             }
 
             if(i == 2) {
-                set_elem_value(id_elem, new_value);
+                if(valid_elem_id(id_elem)) {
+                    set_elem_value(id_elem, new_value);
+                } else {
+                    printf("%s -> Identificador no vàlid.\n", id_elem);
+                }
             } else {
                 printf("Ús: set <identificador_element> <nou_valor>.\n");
             }
@@ -731,9 +733,7 @@ void treat_command(char command[]) {
 
             if(j == 1) {
                 if(valid_elem_id(id_elem)) {
-                    strcpy(actual_elem, id_elem);
-                    strcpy(actual_value, associated_value(id_elem));
-                    send_tcp_data_package();
+                    send_tcp_data_package(id_elem);
                     return;
                 } else {
                     printf("%s -> Identificador no vàlid.\n", id_elem);
@@ -767,38 +767,38 @@ void disconnect_client() {
 }
 
 void set_elem_value(char id_elem[], char new_value[]) {
-    if(!valid_elem_id(id_elem)) {
-        printf("%s -> Identificador no vàlid.\n", id_elem);
-    } else {
-        if(strcmp(client.elem_one, id_elem) == 0) {
-            strcpy(client.value_one, new_value);
-        } else if(strcmp(client.elem_two, id_elem) == 0) {
-            strcpy(client.value_two, new_value);
-        } else if(strcmp(client.elem_three, id_elem) == 0) {
-            strcpy(client.value_three, new_value);
-        } else if(strcmp(client.elem_four, id_elem) == 0) {
-            strcpy(client.value_four, new_value);
-        } else if(strcmp(client.elem_five, id_elem) == 0) {
-            strcpy(client.value_five, new_value);
-        }
-
-        printf("INF -> Valor de l'element %s canviat amb èxit.\n", id_elem);
+    if(strcmp(client.elem_one, id_elem) == 0) {
+        strcpy(client.value_one, new_value);
+    } else if(strcmp(client.elem_two, id_elem) == 0) {
+        strcpy(client.value_two, new_value);
+    } else if(strcmp(client.elem_three, id_elem) == 0) {
+        strcpy(client.value_three, new_value);
+    } else if(strcmp(client.elem_four, id_elem) == 0) {
+        strcpy(client.value_four, new_value);
+    } else if(strcmp(client.elem_five, id_elem) == 0) {
+        strcpy(client.value_five, new_value);
     }
+
+    printf("INF -> Valor de l'element %s canviat amb èxit.\n", id_elem);
 }
 
-void send_tcp_data_package() {
+
+void send_tcp_data_package(char id_elem[]) {
     struct timeval tmv;
     tmv.tv_sec = M;
     tmv.tv_usec = 0;
 
     ssize_t send_p, recv_p;
 
+    char actual_value[16];
+    strcpy(actual_value, associated_value(id_elem));
+
     char date[80];
     time_t t = time(NULL);
     struct tm *tmp = localtime(&t);
     strftime(date, 80, "%Y-%m-%d;%H:%M:%S", tmp);
 
-    struct TCPPackage send_tcp_data = build_tcp_package(SEND_DATA, client.client_id, server_data.communication_id, actual_elem, actual_value, date);
+    struct TCPPackage send_tcp_data = build_tcp_package(SEND_DATA, client.client_id, server_data.communication_id, id_elem, actual_value, date);
     print_tcp_package(send_tcp_data);
 
     setup_tcp_socket();
@@ -821,18 +821,23 @@ void send_tcp_data_package() {
 
 }
 
+
 void treat_data_tcp_package(struct TCPPackage received_pack) {
     if(received_pack.package_type == DATA_ACK) {
         if(valid_tcp_package(received_pack)) {
             printf("Rebut paquet DATA_ACK -> Enviament d'informació acceptat.\n");
+            close(tcp_socket.tcp_socket_fd);
         } else {
             printf("Dades del paquet DATA_ACK errònies. -> S'iniciarà un nou procés de registre.\n");
             client.state = NOT_REGISTERED;
+            close(udp_socket.udp_socket_fd);
+            close(tcp_socket.tcp_socket_fd);
             num_reg_pr++;
             register_process(num_reg_pr);
         }
     } else if(received_pack.package_type == DATA_NACK) {
         printf("Rebut paquet DATA_NACK -> Error al emmagatzemar les dades o dades errònies.\n");
+        close(tcp_socket.tcp_socket_fd);
     } else if(received_pack.package_type == DATA_REJ) {
         printf("Rebut paquet DATA_REJ -> Informació rebutjada. S'obrirà un nou procés de registre.\n");
         client.state = NOT_REGISTERED;
@@ -842,9 +847,20 @@ void treat_data_tcp_package(struct TCPPackage received_pack) {
         num_reg_pr++;
         register_process(num_reg_pr);
     } else if(received_pack.package_type == SET_DATA) {
-        printf("Rebut paquet SET_DATA\n");
+        if(valid_tcp_package(received_pack) && valid_elem_id(received_pack.elem) && received_pack.elem[6] == 'I') {
+            printf("Rebut paquet SET_DATA\n");
+            set_elem_value(received_pack.elem, received_pack.value);
+            send_tcp_data_package(received_pack.elem);
+        } else {
+            printf("Rebut paquet SET_DATA -> Però les dades són incorrectes.\n");
+        }
     } else if(received_pack.package_type == GET_DATA) {
-        printf("Rebut paquet GET_DATA\n");
+        if(valid_tcp_package(received_pack) && valid_elem_id(received_pack.elem)) {
+            printf("Rebut paquet GET_DATA -> L'element pertany al dispositiu.\n");
+            send_tcp_data_package(received_pack.elem);
+        } else {
+            printf("Rebut paquet GET_DATA -> Però les dades són incorrectes.\n");
+        }
     } else {
         printf("Rebut paquet UNKNOWN\n");
     }
