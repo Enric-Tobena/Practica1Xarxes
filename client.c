@@ -159,7 +159,7 @@ void print_elems();
 void treat_command(char command[]);
 void disconnect_client();
 void set_elem_value(char id_elem[], char new_value[]);
-void send_tcp_data_package(char id_elem[]);
+void send_tcp_data_package(unsigned char package_type, char id_elem[]);
 char *associated_value(char id_elem[]);
 void treat_data_tcp_package(struct TCPPackage received_pack);
 
@@ -733,7 +733,7 @@ void treat_command(char command[]) {
 
             if(j == 1) {
                 if(valid_elem_id(id_elem)) {
-                    send_tcp_data_package(id_elem);
+                    send_tcp_data_package(SEND_DATA, id_elem);
                     return;
                 } else {
                     printf("%s -> Identificador no vàlid.\n", id_elem);
@@ -783,7 +783,7 @@ void set_elem_value(char id_elem[], char new_value[]) {
 }
 
 
-void send_tcp_data_package(char id_elem[]) {
+void send_tcp_data_package(unsigned char package_type, char id_elem[]) {
     struct timeval tmv;
     tmv.tv_sec = M;
     tmv.tv_usec = 0;
@@ -798,7 +798,7 @@ void send_tcp_data_package(char id_elem[]) {
     struct tm *tmp = localtime(&t);
     strftime(date, 80, "%Y-%m-%d;%H:%M:%S", tmp);
 
-    struct TCPPackage send_tcp_data = build_tcp_package(SEND_DATA, client.client_id, server_data.communication_id, id_elem, actual_value, date);
+    struct TCPPackage send_tcp_data = build_tcp_package(package_type, client.client_id, server_data.communication_id, id_elem, actual_value, date);
     print_tcp_package(send_tcp_data);
 
     setup_tcp_socket();
@@ -848,16 +848,16 @@ void treat_data_tcp_package(struct TCPPackage received_pack) {
         register_process(num_reg_pr);
     } else if(received_pack.package_type == SET_DATA) {
         if(valid_tcp_package(received_pack) && valid_elem_id(received_pack.elem) && received_pack.elem[6] == 'I') {
-            printf("Rebut paquet SET_DATA\n");
+            printf("Rebut paquet SET_DATA -> Dades correctes\n");
             set_elem_value(received_pack.elem, received_pack.value);
-            send_tcp_data_package(received_pack.elem);
+            send_tcp_data_package(DATA_ACK, received_pack.elem);
         } else {
             printf("Rebut paquet SET_DATA -> Però les dades són incorrectes.\n");
         }
     } else if(received_pack.package_type == GET_DATA) {
         if(valid_tcp_package(received_pack) && valid_elem_id(received_pack.elem)) {
             printf("Rebut paquet GET_DATA -> L'element pertany al dispositiu.\n");
-            send_tcp_data_package(received_pack.elem);
+            send_tcp_data_package(DATA_ACK, received_pack.elem);
         } else {
             printf("Rebut paquet GET_DATA -> Però les dades són incorrectes.\n");
         }

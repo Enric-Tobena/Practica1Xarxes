@@ -5,6 +5,3 @@ all:
 # make clean
 clean:
 	-rm -fr nouclient
-
-
-
