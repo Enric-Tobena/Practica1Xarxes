@@ -782,7 +782,6 @@ void set_elem_value(char id_elem[], char new_value[]) {
     printf("INF -> Valor de l'element %s canviat amb èxit.\n", id_elem);
 }
 
-
 void send_tcp_data_package(unsigned char package_type, char id_elem[]) {
     struct timeval tmv;
     tmv.tv_sec = M;
