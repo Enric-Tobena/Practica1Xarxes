@@ -91,9 +91,9 @@ def parse_args():
                 else:
                     server_data = setup_server(sys.argv[4])
                     authorized_clients(sys.argv[2])
-    elif len(sys.argv) == 6:                        #Falta acabar len=6 pero no es imprescindible perque funcioni
-        correct_debug = False                                                               #
-        i = 1                                                                               #
+    elif len(sys.argv) == 6:
+        correct_debug = False
+        i = 1
         while i < len(sys.argv):
             if sys.argv[i] == "-d":
                 correct_debug = True
@@ -101,9 +101,39 @@ def parse_args():
                 break
             i += 2
         if not correct_debug:
-            print("Ús incorrecte dels paràmetres d'entrada")                                #
-            exit(-1)                                                                        #
+            print("Ús incorrecte dels paràmetres d'entrada")
+            exit(-1)
 
+        if i == 1:
+            if sys.argv[2] == "-c" and sys.argv[4] == "-u":
+                server_data = setup_server(sys.argv[3])
+                authorized_clients(sys.argv[5])
+            elif sys.argv[2] == "-u" and sys.argv[4] == "-c":
+                server_data = setup_server(sys.argv[5])
+                authorized_clients(sys.argv[3])
+            else:
+                print("Ús incorrecte dels paràmetres d'entrada")
+                exit(-1)
+        elif i == 3:
+            if sys.argv[1] == "-c" and sys.argv[4] == "-u":
+                server_data = setup_server(sys.argv[2])
+                authorized_clients(sys.argv[5])
+            elif sys.argv[1] == "-u" and sys.argv[4] == "-c":
+                server_data = setup_server(sys.argv[5])
+                authorized_clients(sys.argv[2])
+            else:
+                print("Ús incorrecte dels paràmetres d'entrada")
+                exit(-1)
+        elif i == 5:
+            if sys.argv[1] == "-c" and sys.argv[3] == "-u":
+                server_data = setup_server(sys.argv[2])
+                authorized_clients(sys.argv[4])
+            elif sys.argv[1] == "-u" and sys.argv[3] == "-c":
+                server_data = setup_server(sys.argv[4])
+                authorized_clients(sys.argv[2])
+            else:
+                print("Ús incorrecte dels paràmetres d'entrada")
+                exit(-1)
     else:
         print("Ús incorrecte dels paràmetres d'entrada")
         exit(-1)
