@@ -5,6 +5,7 @@ import sys
 from datetime import datetime
 
 debug = False
+check_client = []
 
 
 class server_config:
@@ -16,21 +17,56 @@ class server_config:
 
 def parse_args():
     global debug
+    global check_client
 
-    if len(sys.argv) == 1 or len(sys.argv) == 2 and sys.argv[1] == "-d":
+    if len(sys.argv) <= 2:
         if len(sys.argv) == 2:
-            debug = True
-        print("Executar servidor normal")
-        server = setup_server("server.cfg")
-        print_server(server)
-        debug_message("INF. -> Debugger activat per paràmetre '-d'")
-    elif len(sys.argv) == 3 and sys.argv[1] == "-c":
-        datafile_name = sys.argv[2]
-        server = setup_server(datafile_name)
-        print_server(server)
-    elif len(sys.argv) == 2 and sys.argv[1] == "-d":
-        debug_message("INF. -> Debugger activat per paràmetre '-d'")
+            if sys.argv[1] is not "-d":
+                print("Ús incorrecte dels paràmetres d'entrada")
+                exit(-1)
+            else:
+                debug = True
+        server_data = setup_server("server.cfg")
+        authorized_clients("bbdd_dev.dat")
+    elif len(sys.argv) == 3:
+            if sys.argv[1] is not "-c" or "-u":
+                print("Ús incorrecte dels paràmetres d'entrada")
+                exit(-1)
+            if sys.argv[1] == "-c":
+                server_data = setup_server(sys.argv[2])
+                authorized_clients("bbdd_dev.dat")
+            if sys.argv[1] == "-u":
+                server_data = setup_server("server.cfg")
+                authorized_clients(sys.argv[2])
+    elif len(sys.argv) == 4:
         debug = True
+        if sys.argv[1] == "-d":
+            if sys.argv[2] is not "-c" or "-u":
+                print("Ús incorrecte dels paràmetres d'entrada")
+                exit(-1)
+            if sys.argv[2] == "-c":
+                server_data = setup_server(sys.argv[3])
+                authorized_clients("bbdd_dev.dat")
+            if sys.argv[2] == "-u":
+                server_data = setup_server("server.cfg")
+                authorized_clients(sys.argv[3])
+        elif sys.argv[3] == "-d":
+            if sys.argv[1] is not "-c" or "-u":
+                print("Ús incorrecte dels paràmetres d'entrada")
+                exit(-1)
+            if sys.argv[1] == "-c":
+                server_data = setup_server(sys.argv[2])
+                authorized_clients("bbdd_dev.dat")
+            if sys.argv[1] == "-u":
+                server_data = setup_server("server.cfg")
+                authorized_clients(sys.argv[2])
+        else:
+            print("Ús incorrecte dels paràmetres d'entrada")
+            exit(-1)
+    elif len(sys.argv) == 5:
+
+    elif len(sys.argv) == 6:
+
     else:
         print("Ús incorrecte dels paràmetres d'entrada")
         exit(-1)
@@ -57,12 +93,24 @@ def setup_server(server_cfg):
         print("ERR. -> El fitxer no existeix o no s'ha pogut obrir correctament")
         exit(-1)
 
+def authorized_clients(bbdd_dev):
+    try:
+        with open(bbdd_dev) as clientid_file:
+            client_id = clientid_file.readline().split("\n ").replace('\n', '')
+            while client_id is not "":
+                check_client.append(client_id)
+                client_id = clientid_file.readline().split("\n ").replace('\n', '')
 
-def print_server(server):
+    except FileNotFoundError:
+        print("ERR. -> El fitxer no existeix o no s'ha pogut obrir correctament")
+        exit(-1)
+
+
+def print_server(server_data):
     print("/* SERVER PARAMS */")
-    print("Id:", server.id_serv)
-    print("UDP_port:", server.udp_port)
-    print("TCP_port:", server.tcp_port)
+    print("Id:", server_data.id_serv)
+    print("UDP_port:", server_data.udp_port)
+    print("TCP_port:", server_data.tcp_port)
 
 
 if __name__ == '__main__':
