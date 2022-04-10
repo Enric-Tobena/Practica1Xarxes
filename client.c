@@ -146,7 +146,7 @@ void setup_udp_socket();
 void setup_client(char client_cfg[]);
 void read_file();
 void debug_message(char message[]);
-void register_process(int num_process);
+void start_client(int num_process);
 int register_loop(struct UDPPackage reg_request);
 int first_P_register_req(struct UDPPackage reg_request);
 int second_register_req(struct UDPPackage reg_request);
@@ -196,7 +196,7 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
 
-    register_process(num_reg_pr);
+    start_client(num_reg_pr);
 }
 
 void parse_args(int argc, char *argv[]) {
@@ -375,7 +375,7 @@ void debug_message(char message[]) {
     }
 }
 
-void register_process(int num_process) {
+void start_client(int num_process) {
     setup_udp_socket();
     struct UDPPackage reg_request = build_udp_package(REG_REQ, client.client_id, "0000000000", "");
     //print_udp_package(reg_request);
@@ -504,12 +504,12 @@ void treat_register_udp_package(struct UDPPackage received_pack) {
     } else if(received_pack.package_type == REG_NACK) {
         printf("Rebut paquet REG_NACK -> Es reiniciarà l'enviament de paquets de registre\n");
         client.state = NOT_REGISTERED;
-        register_process(num_reg_pr);
+        start_client(num_reg_pr);
     } else if(received_pack.package_type == REG_REJ) {
         printf("Rebut paquet REG_REJ -> S'iniciarà un nou procés de registre\n");
         client.state = NOT_REGISTERED;
         num_reg_pr++;
-        register_process(num_reg_pr);
+        start_client(num_reg_pr);
     } else if(received_pack.package_type == INFO_ACK) {
         if(valid_udp_package(received_pack)) {
             printf("Rebut paquet INFO_ACK -> Estat del client: WAIT_ACK_INFO -> REGISTERED\n");
@@ -523,7 +523,7 @@ void treat_register_udp_package(struct UDPPackage received_pack) {
             udp_socket.udp_socket_address.sin_port = htons(udp_socket.server_udp);
             client.state = NOT_REGISTERED;
             num_reg_pr++;
-            register_process(num_reg_pr);
+            start_client(num_reg_pr);
         }
     } else if(received_pack.package_type == INFO_NACK) {
         if(valid_udp_package(received_pack)) {
@@ -535,12 +535,12 @@ void treat_register_udp_package(struct UDPPackage received_pack) {
         }
         client.state = NOT_REGISTERED;
         udp_socket.udp_socket_address.sin_port = htons(udp_socket.server_udp);
-        register_process(num_reg_pr);
+        start_client(num_reg_pr);
     } else {
         printf("Rebut paquet UNKNOWN: S'iniciarà un nou procés de registre\n");
         client.state = NOT_REGISTERED;
         num_reg_pr++;
-        register_process(num_reg_pr);
+        start_client(num_reg_pr);
     }
 }
 
@@ -579,7 +579,7 @@ void send_reg_info() {
             printf("INF. -> S'iniciarà un nou procés de registre: Paquet de confirmació de client NO rebut.\n");
             udp_socket.udp_socket_address.sin_port = htons(udp_socket.server_udp);
             num_reg_pr++;
-            register_process(num_reg_pr);
+            start_client(num_reg_pr);
         } else {
             treat_register_udp_package(received_udp_from_server);
         }
@@ -613,7 +613,7 @@ void send_alive_packs() {
                     client.state = NOT_REGISTERED;
                     printf("INF. -> S'iniciarà un nou procés de registre: Número de paquets ALIVE no rebuts excedit.\n");
                     num_reg_pr++;
-                    register_process(num_reg_pr);
+                    start_client(num_reg_pr);
                 }
                 debug_message("INF. -> Enviament d'ALIVE");
             } else {            //falta retocar algo de aqui
@@ -642,25 +642,25 @@ void treat_alive_udp_package(struct UDPPackage received_pack) {
             printf("ERR. -> Dades del paquet ALIVE errònies. S'iniciarà un nou procés de registre.\n");
             client.state = NOT_REGISTERED;
             num_reg_pr++;
-            register_process(num_reg_pr);
+            start_client(num_reg_pr);
         }
     } else if(received_pack.package_type == ALIVE_NACK) {
         printf("Rebut paquet ALIVE_NACK -> Es reiniciarà l'enviament de paquets de registre.\n");
         client.state = NOT_REGISTERED;
         pthread_cancel(to_read);
-        register_process(num_reg_pr);
+        start_client(num_reg_pr);
     } else if(received_pack.package_type == ALIVE_REJ) {
         printf("Rebut paquet ALIVE_REJ -> S'iniciarà un nou procés de registre\n");
         client.state = NOT_REGISTERED;
         pthread_cancel(to_read);
         num_reg_pr++;
-        register_process(num_reg_pr);
+        start_client(num_reg_pr);
     } else {
         printf("Rebut paquet UNKNOWN -> S'iniciarà un nou procés de registre\n");
         client.state = NOT_REGISTERED;
         pthread_cancel(to_read);
         num_reg_pr++;
-        register_process(num_reg_pr);
+        start_client(num_reg_pr);
     }
 }
 
@@ -812,7 +812,7 @@ void send_tcp_data_package(unsigned char package_type, char id_elem[]) {
     if(recv_p < 0) {
         printf("Timeout del socket TCP esgotat -> Dades no acceptades. S'iniciarà un nou procés de registre.\n");
         num_reg_pr++;
-        register_process(num_reg_pr);
+        start_client(num_reg_pr);
     } else {
         print_tcp_package(received_tcp_from_server);
         treat_data_tcp_package(received_tcp_from_server);
@@ -832,7 +832,7 @@ void treat_data_tcp_package(struct TCPPackage received_pack) {
             close(udp_socket.udp_socket_fd);
             close(tcp_socket.tcp_socket_fd);
             num_reg_pr++;
-            register_process(num_reg_pr);
+            start_client(num_reg_pr);
         }
     } else if(received_pack.package_type == DATA_NACK) {
         printf("Rebut paquet DATA_NACK -> Error al emmagatzemar les dades o dades errònies.\n");
@@ -844,7 +844,7 @@ void treat_data_tcp_package(struct TCPPackage received_pack) {
         close(udp_socket.udp_socket_fd);
         close(tcp_socket.tcp_socket_fd);
         num_reg_pr++;
-        register_process(num_reg_pr);
+        start_client(num_reg_pr);
     } else if(received_pack.package_type == SET_DATA) {
         if(valid_tcp_package(received_pack) && valid_elem_id(received_pack.elem) && received_pack.elem[6] == 'I') {
             printf("Rebut paquet SET_DATA -> Dades correctes\n");
