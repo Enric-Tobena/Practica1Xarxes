@@ -187,41 +187,58 @@ def setup_sockets():
 
 def listen_to_connections():
     global tcp_thread, udp_thread
-    tcp_thread = threading.Thread(target=tcp_connection)
+    #tcp_thread = threading.Thread(target=tcp_connection)
     udp_thread = threading.Thread(target=udp_connection)
-    tcp_thread.daemon = True
-    udp_thread.daemon = True
+    #tcp_thread.daemon = True
+    #udp_thread.daemon = True
 
     debug_message("INF. -> Connexions TCP i UDP inicialitzades correctament")
-    tcp_thread.start()
+    #tcp_thread.start()
     udp_thread.start()
 
+def udp_connection():
+    global tcp_socket_fd, udp_socket_fd
+    try:
+        udp_socket_fd.bind(('localhost', server_data.udp_port))
+    except socket.error as err_msg:
+        print("Error al mètode bind del socket UDP:", err_msg)
+        exit(-1)
 
-def send_udp_package(package_type, address):
-    if package_type == '0xA1':
+    debug_message("INF. -> Port UDP obert a rebre paquets")
+    while True:
+        received, address = udp_socket_fd.recvfrom(struct.calcsize(udp_pack_format))
+        pack_to_string = struct.unpack(udp_pack_format, received)
+
+        received_pack = get_udp_params(pack_to_string)
+        treat_received_udp(received_pack, address)
+
+
+
+def send_udp_package(package, address):
+    if package['package_type'] == '0xa1':
         print("REG_ACK")
         pack_to_send = struct.pack(udp_pack_format)
-    elif package_type == '0xA2':
+    elif package['package_type'] == '0xa2':
         print("REG_NACK")
         pack_to_send = struct.pack(udp_pack_format)
-    elif package_type == '0xA3':
+    elif package['package_type'] == '0xa3':
         print("REG_REJ")
         pack_to_send = struct.pack(udp_pack_format)
-    elif package_type == '0xA5':
+    elif package['package_type'] == '0xa5':
         print("INFO_ACK")
         pack_to_send = struct.pack(udp_pack_format)
-    elif package_type == '0xA6':
+    elif package['package_type'] == '0xa6':
         print("INFO_NACK")
         pack_to_send = struct.pack(udp_pack_format)
-    elif package_type == '0xA7':
+    elif package['package_type'] == '0xa7':
         print("INFO_REJ")
         pack_to_send = struct.pack(udp_pack_format)
 
-def treat_received_udp(package_type, address):
-    if package_type == '0xA0':
+def treat_received_udp(package, address):
+    if package['package_type'] == '0xa0':
         print("REG_REQ")
         #data = struct.unpack
-    elif package_type == '0xA4':
+    elif package['package_type'] == '0xa4':
         print("REG_INFO")
 
 def is_authorized(new_clientid):
@@ -263,4 +280,5 @@ if __name__ == '__main__':
     print_server()
     print_authorized_clients()
     setup_sockets()
+    listen_to_connections()
 
