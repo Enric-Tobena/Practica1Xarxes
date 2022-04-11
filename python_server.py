@@ -212,23 +212,24 @@ def udp_connection():
         received_pack = get_udp_params(pack_to_string)
         treat_received_udp(received_pack, address)
 
-def send_udp_package(package, address):
-    if package['package_type'] == '0xa1':
+def send_udp_package(package_type, address):
+    if package_type == '0xa1':
         print("REG_ACK")
         pack_to_send = struct.pack(udp_pack_format)
-    elif package['package_type'] == '0xa2':
+    elif package_type == '0xa2':
         print("REG_NACK")
         pack_to_send = struct.pack(udp_pack_format)
-    elif package['package_type'] == '0xa3':
+    elif package_type == '0xa3':
         print("REG_REJ")
-        pack_to_send = struct.pack(udp_pack_format)
-    elif package['package_type'] == '0xa5':
+        pack_to_send = struct.pack(udp_pack_format, 0xa3, bytes(server_data.id_serv, 'utf-8'), bytes("0000000000", 'utf-8'), bytes("Dades incorrectes o client no autoritzat", 'utf-8'))
+        udp_socket_fd.sendto(pack_to_send, address)
+    elif package_type == '0xa5':
         print("INFO_ACK")
         pack_to_send = struct.pack(udp_pack_format)
-    elif package['package_type'] == '0xa6':
+    elif package_type == '0xa6':
         print("INFO_NACK")
         pack_to_send = struct.pack(udp_pack_format)
-    elif package['package_type'] == '0xa7':
+    elif package_type == '0xa7':
         print("INFO_REJ")
         pack_to_send = struct.pack(udp_pack_format)
 
@@ -238,7 +239,7 @@ def treat_received_udp(package, address):
         if is_valid_udp(package, "0000000000", ""):
             print("CORRECT")
         else:
-            print("FFF")
+            send_udp_package('0xa3', address)
     elif package['package_type'] == '0xa4':
         print("REG_INFO")
 
