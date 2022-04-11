@@ -197,7 +197,7 @@ def listen_to_connections():
     udp_thread.start()
 
 def udp_connection():
-    global tcp_socket_fd, udp_socket_fd
+    global udp_socket_fd
     try:
         udp_socket_fd.bind(('localhost', server_data.udp_port))
     except socket.error as err_msg:
@@ -212,15 +212,26 @@ def udp_connection():
         received_pack = get_udp_params(pack_to_string)
         treat_received_udp(received_pack, address)
 
-def send_udp_package(package_type, address):
+
+def send_udp_package(package_type, address, id_client):
     if package_type == '0xa1':
-        print("REG_ACK")
-        pack_to_send = struct.pack(udp_pack_format)
+        debug_message("INF. -> Dades del paquet REG_REQ correctes. Enviament de REG_ACK")
+
+        id_com = generate_rand_int(10)
+        change_idcom(id_client, id_com)
+        new_udp_port = generate_rand_int(5)
+
+        pack_to_send = struct.pack(udp_pack_format, 0xa1, bytes(server_data.id_serv, 'utf-8'), bytes(id_com, 'utf-8'), bytes(new_udp_port, 'utf-8'))
+        udp_socket_fd.sendto(pack_to_send, address)
+
+        print("INF. -> El client", id_client, "passa a l'estat WAIT-INFO")
+        print_authorized_clients()
+
     elif package_type == '0xa2':
         print("REG_NACK")
         pack_to_send = struct.pack(udp_pack_format)
     elif package_type == '0xa3':
-        print("REG_REJ")
+        debug_message("INF. -> Dades del paquet REG_REQ incorrectes. Enviament de REG_REJ")
         pack_to_send = struct.pack(udp_pack_format, 0xa3, bytes(server_data.id_serv, 'utf-8'), bytes("0000000000", 'utf-8'), bytes("Dades incorrectes o client no autoritzat", 'utf-8'))
         udp_socket_fd.sendto(pack_to_send, address)
     elif package_type == '0xa5':
@@ -237,9 +248,11 @@ def treat_received_udp(package, address):
     if package['package_type'] == '0xa0':
         debug_message("INF. -> Rebut paquet REG_REQ. es comprovaran les dades del dispositiu")
         if is_valid_udp(package, "0000000000", ""):
-            print("CORRECT")
+            change_status(package['id_transmitter'], "WAIT_INFO")
+            change_address(package['id_transmitter'], address)
+            send_udp_package('0xa1', address, package['id_transmitter'])
         else:
-            send_udp_package('0xa3', address)
+            send_udp_package('0xa3', address, package['id_transmitter'])
     elif package['package_type'] == '0xa4':
         print("REG_INFO")
 
@@ -251,6 +264,31 @@ def is_authorized(new_clientid):
         if client.id_client == new_clientid:
             return True
     return False
+
+def change_status(client_id, new_status):
+    for client in clients_list:
+        if client.id_client == client_id:
+            client.status = new_status
+
+def change_address(client_id, new_address):
+    for client in clients_list:
+        if client.id_client == client_id:
+            client.ip_address = new_address
+
+def change_idcom(client_id, new_idcom):
+    for client in clients_list:
+        if client.id_client == client_id:
+            client.id_communication = new_idcom
+
+def get_address(client_id):
+    for client in clients_list:
+        if client.id_client == client_id:
+            return client.ip_address
+
+def get_idcom(client_id):
+    for client in clients_list:
+        if client.id_client == client_id:
+            return client.id_communication
 
 def get_udp_params(udp_params):         #se li passa un string que ve del struct.unpack
     prov_list = []
@@ -267,6 +305,16 @@ def get_udp_params(udp_params):         #se li passa un string que ve del struct
         ordered_data['data'] = prov_list[3]
 
     return ordered_data
+
+def generate_rand_int(n):
+    if n != 5:
+        result = str(random.randint(0, 9))
+    else:
+        result = str(random.randint(0, 5))
+
+    for i in range(0, n - 1):
+        result += str(random.randint(0, 9))
+    return result
 
 def print_server():
     print("/* SERVER PARAMS */")
