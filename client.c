@@ -428,7 +428,7 @@ int first_P_register_req(struct UDPPackage reg_request) {
 
         if (client.state == NOT_REGISTERED) {
             client.state = WAIT_ACK_REG;
-            debug_message("INF. -> Sol·licitud de registre (REG_REQ) enviada. Estat del client: NOT_REGISTERED -> WAIT_ACK_REG");
+            printf("INF. -> Sol·licitud de registre (REG_REQ) enviada. Estat del client: NOT_REGISTERED -> WAIT_ACK_REG\n");
         } else {
             debug_message("INF. -> Sol·licitud de registre (REG_REQ) enviada. Estat del client: WAIT_ACK_REG");
         }
@@ -464,7 +464,7 @@ int second_register_req(struct UDPPackage reg_request) {
 
         if (client.state == NOT_REGISTERED) {
             client.state = WAIT_ACK_REG;
-            debug_message("INF. -> Sol·licitud de registre (REG_REQ) enviada. Estat del client: NOT_REGISTERED -> WAIT_ACK_REG");
+            printf("INF. -> Sol·licitud de registre (REG_REQ) enviada. Estat del client: NOT_REGISTERED -> WAIT_ACK_REG\n");
         } else {
             debug_message("INF. -> Sol·licitud de registre (REG_REQ) enviada. Estat del client: WAIT_ACK_REG");
         }
@@ -566,7 +566,7 @@ void send_reg_info() {
     } else {
         if(client.state == WAIT_ACK_REG) {
             client.state = WAIT_ACK_INFO;
-            debug_message("INF. -> Paquet REG_INFO enviat al servidor. Estat del client: WAIT_ACK_REG -> WAIT_ACK_INFO");
+            printf("INF. -> Paquet REG_INFO enviat al servidor. Estat del client: WAIT_ACK_REG -> WAIT_ACK_INFO\n");
         }
 
         setsockopt(udp_socket.udp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
@@ -575,8 +575,8 @@ void send_reg_info() {
         //print_udp_package(received_udp_from_server);
         if(recv < 0) {
             client.state = NOT_REGISTERED;
-            debug_message("INF. -> No s'ha rebut el paquet de confirmació de client: Estat del client: WAIT_ACK_INFO -> NOT_REGISTERED");
-            printf("INF. -> S'iniciarà un nou procés de registre: Paquet de confirmació de client NO rebut.\n");
+            debug_message("INF. -> No s'ha rebut el paquet de confirmació de client");
+            printf("INF. -> Estat del client. WAIT_ACK_INFO -> NOT_REGISTERED.\n");
             udp_socket.udp_socket_address.sin_port = htons(udp_socket.server_udp);
             num_reg_pr++;
             start_client(num_reg_pr);
@@ -616,7 +616,7 @@ void send_alive_packs() {
                     start_client(num_reg_pr);
                 }
                 debug_message("INF. -> Enviament d'ALIVE");
-            } else {            //falta retocar algo de aqui
+            } else {
                 //print_udp_package(received_udp_from_server);
                 not_received_alives = 0;
                 treat_alive_udp_package(received_udp_from_server);
@@ -632,7 +632,7 @@ void treat_alive_udp_package(struct UDPPackage received_pack) {
             if(client.state == REGISTERED) {
                 client.state = SEND_ALIVE;
                 pthread_create(&to_read, NULL, read_commands, NULL);
-                debug_message("INF. -> Estat del client: REGISTERED -> SEND_ALIVE");
+                printf("INF. -> Estat del client: REGISTERED -> SEND_ALIVE\n");
                 debug_message("INF. -> Port TCP obert");
             }
             debug_message("INF. -> Enviament d'ALIVE");

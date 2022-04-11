@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 
+import sys, os, traceback, optparse, struct, random
+import time
 import socket, select
-import sys
+import threading
 from datetime import datetime
+
+udp_pack_format = "B11s11s61s"
+tcp_pack_format = "B11s11s8s16s80s"
 
 debug = False
 clients_id_list = []
@@ -20,6 +25,7 @@ class connected_client:
         self.id_client = id_client
         self.id_communication = id_communication
         self.ip_address = ip_address
+        self.status = 'DISCONNECTED'
 
 def parse_args():
     global debug, server_data
@@ -152,8 +158,8 @@ def setup_server(server_cfg):
     try:
         with open(server_cfg) as server_file:
             id_serv = server_file.readline().split("= ")[1].replace('\n', '')
-            udp_port = server_file.readline().split("= ")[1].replace('\n', '')
-            tcp_port = server_file.readline().split("= ")[1].replace('\n', '')
+            udp_port = int(server_file.readline().split("= ")[1].replace('\n', ''))
+            tcp_port = int(server_file.readline().split("= ")[1].replace('\n', ''))
 
             return server_config(id_serv, udp_port, tcp_port)
 
@@ -179,6 +185,65 @@ def setup_sockets():
     udp_socket_fd = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     debug_message("Sockets TCP i UDP inicialitzats correctament")
 
+def listen_to_connections():
+    global tcp_thread, udp_thread
+    tcp_thread = threading.Thread(target=tcp_connection)
+    udp_thread = threading.Thread(target=udp_connection)
+    tcp_thread.daemon = True
+    udp_thread.daemon = True
+
+    debug_message("INF. -> Connexions TCP i UDP inicialitzades correctament")
+    tcp_thread.start()
+    udp_thread.start()
+
+
+def send_udp_package(package_type, address):
+    if package_type == '0xA1':
+        print("REG_ACK")
+        pack_to_send = struct.pack(udp_pack_format)
+    elif package_type == '0xA2':
+        print("REG_NACK")
+        pack_to_send = struct.pack(udp_pack_format)
+    elif package_type == '0xA3':
+        print("REG_REJ")
+        pack_to_send = struct.pack(udp_pack_format)
+    elif package_type == '0xA5':
+        print("INFO_ACK")
+        pack_to_send = struct.pack(udp_pack_format)
+    elif package_type == '0xA6':
+        print("INFO_NACK")
+        pack_to_send = struct.pack(udp_pack_format)
+    elif package_type == '0xA7':
+        print("INFO_REJ")
+        pack_to_send = struct.pack(udp_pack_format)
+
+def treat_received_udp(package_type, address):
+    if package_type == '0xA0':
+        print("REG_REQ")
+        #data = struct.unpack
+    elif package_type == '0xA4':
+        print("REG_INFO")
+
+def is_authorized(new_clientid):
+    for client in clients_id_list:
+        if client == new_clientid:
+            return True
+    return False
+
+def get_udp_params(udp_params):         #se li passa un string que ve del struct.unpack
+    prov_list = []
+    ordered_data = {'package_type' : 0x00, 'id_transmitter' : "", 'id_communication' : "", 'data' : ""}
+
+    for param in udp_params:
+        prov_list.append(str(param).split('\x00')[0])
+
+    ordered_data['package_type'] = str(hex(int(prov_list[0])))
+    ordered_data['id_transmitter'] = prov_list[1]
+    ordered_data['id_communication'] = prov_list[2]
+    ordered_data['data'] = prov_list[3]
+
+    return ordered_data
+
 def print_server():
     print("/* SERVER PARAMS */")
     print("Id:", server_data.id_serv)
@@ -197,6 +262,5 @@ if __name__ == '__main__':
 
     print_server()
     print_authorized_clients()
-    debug_message("Debugger activat")
     setup_sockets()
 
