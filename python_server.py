@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import sys, os, traceback, optparse, struct, random
+import sys, os, traceback, optparse, struct, random, re
 import time
 import socket, select
 import threading
@@ -190,7 +190,7 @@ def listen_to_connections():
     #tcp_thread = threading.Thread(target=tcp_connection)
     udp_thread = threading.Thread(target=udp_connection)
     #tcp_thread.daemon = True
-    #udp_thread.daemon = True
+    #udp_thread.setDaemon(True)
 
     debug_message("INF. -> Connexions TCP i UDP inicialitzades correctament")
     #tcp_thread.start()
@@ -212,8 +212,20 @@ def udp_connection():
         received_pack = get_udp_params(pack_to_string)
         treat_received_udp(received_pack, address)
 
+def receive_reg_info(new_udp_port):
+    inf_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    inf_sock.bind(('localhost', int(new_udp_port)))
+
+    received, address = inf_sock.recvfrom(struct.calcsize(udp_pack_format))
+    pack_to_string = struct.unpack(udp_pack_format, received)
+    inf_sock.close()
+
+    received_pack = get_udp_params(pack_to_string)
+    treat_received_udp(received_pack, address)
+
 
 def send_udp_package(package_type, address, id_client):
+    global tcp_thread, udp_thread
     if package_type == '0xa1':
         debug_message("INF. -> Dades del paquet REG_REQ correctes. Enviament de REG_ACK")
 
@@ -223,8 +235,9 @@ def send_udp_package(package_type, address, id_client):
 
         pack_to_send = struct.pack(udp_pack_format, 0xa1, bytes(server_data.id_serv, 'utf-8'), bytes(id_com, 'utf-8'), bytes(new_udp_port, 'utf-8'))
         udp_socket_fd.sendto(pack_to_send, address)
-
         print("INF. -> El client", id_client, "passa a l'estat WAIT-INFO")
+
+        receive_reg_info(new_udp_port)
         print_authorized_clients()
 
     elif package_type == '0xa2':
@@ -254,7 +267,10 @@ def treat_received_udp(package, address):
         else:
             send_udp_package('0xa3', address, package['id_transmitter'])
     elif package['package_type'] == '0xa4':
-        print("REG_INFO")
+        msg = "INF. -> Rebut paquet REG_INFO del client amb id: " + package['id_transmitter'] + ". Es comprovaran les dades del dispositiu"
+        debug_message(msg)
+
+
 
 def is_valid_udp(package, id_communication, data):
     return is_authorized(package['id_transmitter']) and package['id_communication'] == id_communication and package['data'] == data
