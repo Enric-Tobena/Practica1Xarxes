@@ -10,8 +10,7 @@ udp_pack_format = "B11s11s61s"
 tcp_pack_format = "B11s11s8s16s80s"
 
 debug = False
-clients_id_list = []
-connected_clients_list = []
+clients_list = []
 
 
 class server_config:
@@ -20,7 +19,7 @@ class server_config:
         self.udp_port = udp_port
         self.tcp_port = tcp_port
 
-class connected_client:
+class client:
     def __init__(self, id_client, id_communication, ip_address):
         self.id_client = id_client
         self.id_communication = id_communication
@@ -172,7 +171,8 @@ def authorized_clients(bbdd_dev):
         with open(bbdd_dev) as clientid_file:
             client_id = clientid_file.readline().replace("\n", "")
             while len(client_id) > 0:
-                clients_id_list.append(client_id)
+                new_client = client(client_id, "", 'localhost')
+                clients_list.append(new_client)
                 client_id = clientid_file.readline().replace("\n", "")
 
     except FileNotFoundError:
@@ -212,8 +212,6 @@ def udp_connection():
         received_pack = get_udp_params(pack_to_string)
         treat_received_udp(received_pack, address)
 
-
-
 def send_udp_package(package, address):
     if package['package_type'] == '0xa1':
         print("REG_ACK")
@@ -236,14 +234,20 @@ def send_udp_package(package, address):
 
 def treat_received_udp(package, address):
     if package['package_type'] == '0xa0':
-        print("REG_REQ")
-        #data = struct.unpack
+        debug_message("INF. -> Rebut paquet REG_REQ. es comprovaran les dades del dispositiu")
+        if is_valid_udp(package, "0000000000", ""):
+            print("CORRECT")
+        else:
+            print("FFF")
     elif package['package_type'] == '0xa4':
         print("REG_INFO")
 
+def is_valid_udp(package, id_communication, data):
+    return is_authorized(package['id_transmitter']) and package['id_communication'] == id_communication and package['data'] == data
+
 def is_authorized(new_clientid):
-    for client in clients_id_list:
-        if client == new_clientid:
+    for client in clients_list:
+        if client.id_client == new_clientid:
             return True
     return False
 
@@ -252,12 +256,14 @@ def get_udp_params(udp_params):         #se li passa un string que ve del struct
     ordered_data = {'package_type' : 0x00, 'id_transmitter' : "", 'id_communication' : "", 'data' : ""}
 
     for param in udp_params:
-        prov_list.append(str(param).split('\x00')[0])
+        prov_list.append(str(param))
 
     ordered_data['package_type'] = str(hex(int(prov_list[0])))
-    ordered_data['id_transmitter'] = prov_list[1]
-    ordered_data['id_communication'] = prov_list[2]
-    ordered_data['data'] = prov_list[3]
+    ordered_data['id_transmitter'] = prov_list[1][2:12]
+    ordered_data['id_communication'] = prov_list[2][2:12]
+
+    if ordered_data['package_type'] != '0xa0':
+        ordered_data['data'] = prov_list[3]
 
     return ordered_data
 
@@ -269,8 +275,8 @@ def print_server():
 
 def print_authorized_clients():
     print("/* AUTHORIZED CLIENTS */")
-    for client in clients_id_list:
-        print(client)
+    for client in clients_list:
+        print("Id:", client.id_client, '\t', "Status:", client.status, '\t',"Id_com:", client.id_communication, '\t',"IP:", client.ip_address)
 
 if __name__ == '__main__':
     global server_data
