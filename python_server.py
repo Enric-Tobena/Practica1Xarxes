@@ -234,8 +234,9 @@ def tcp_connection():
    tcp_socket_fd.listen(5)
 
    while True:
-       s, a = tcp_socket_fd.accept()
-       received = tcp_socket_fd.recv(struct.calcsize(tcp_pack_format))                #Dona errors
+       s, add = tcp_socket_fd.accept()
+       print("Gggwo")
+       received, address = tcp_socket_fd.recv(struct.calcsize(tcp_pack_format))                #Dona errors
        pack_to_string = struct.unpack(tcp_pack_format, received)
 
        get_tcp_params(pack_to_string)
