@@ -213,12 +213,12 @@ def udp_connection():
         treat_received_udp(received_pack, address)
 
 def receive_reg_info(new_udp_port):
-    inf_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    inf_sock.bind(('localhost', int(new_udp_port)))
+    global udp_socket_fd
 
-    received, address = inf_sock.recvfrom(struct.calcsize(udp_pack_format))
+    debug_message("Abans rebre")
+    received, address = udp_socket_fd.recvfrom(struct.calcsize(udp_pack_format))
+    debug_message("Despres rebre")
     pack_to_string = struct.unpack(udp_pack_format, received)
-    inf_sock.close()
 
     received_pack = get_udp_params(pack_to_string)
     treat_received_udp(received_pack, address)
@@ -232,12 +232,12 @@ def send_udp_package(package_type, address, id_client):
         id_com = generate_rand_int(10)
         change_idcom(id_client, id_com)
         new_udp_port = generate_rand_int(5)
-
-        pack_to_send = struct.pack(udp_pack_format, 0xa1, bytes(server_data.id_serv, 'utf-8'), bytes(id_com, 'utf-8'), bytes(new_udp_port, 'utf-8'))
+                                                                                                                        #Canviar port
+        pack_to_send = struct.pack(udp_pack_format, 0xa1, bytes(server_data.id_serv, 'utf-8'), bytes(id_com, 'utf-8'), bytes("2022", 'utf-8'))
         udp_socket_fd.sendto(pack_to_send, address)
+
         print("INF. -> El client", id_client, "passa a l'estat WAIT-INFO")
 
-        receive_reg_info(new_udp_port)
         print_authorized_clients()
 
     elif package_type == '0xa2':
