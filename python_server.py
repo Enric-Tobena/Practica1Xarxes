@@ -222,7 +222,7 @@ def send_udp_package(package_type, address, id_client):
         change_idcom(id_client, id_com)
         new_udp_port = generate_rand_int(5)
                                                                                                                         #Canviar port
-        pack_to_send = struct.pack(udp_pack_format, 0xa1, bytes(server_data.id_serv, 'utf-8'), bytes(id_com, 'utf-8'), bytes("2022", 'utf-8'))
+        pack_to_send = struct.pack(udp_pack_format, 0xa1, bytes(server_data.id_serv, 'utf-8'), bytes(id_com, 'utf-8'), bytes(str(server_data.udp_port), 'utf-8'))
         udp_socket_fd.sendto(pack_to_send, address)
 
         print("INF. -> El client", id_client, "passa a l'estat WAIT-INFO")
@@ -237,7 +237,7 @@ def send_udp_package(package_type, address, id_client):
         pack_to_send = struct.pack(udp_pack_format, 0xa3, bytes(server_data.id_serv, 'utf-8'), bytes("0000000000", 'utf-8'), bytes("Dades incorrectes o client no autoritzat", 'utf-8'))
         udp_socket_fd.sendto(pack_to_send, address)
     elif package_type == '0xa5':        #INFO_ACK
-        if get_status(id_client) == "WAIT_INFO":
+        if get_status(id_client) == "REGISTERED":
             debug_message("INF. -> Dades del paquet REG_INFO correctes. Enviament de INFO_ACK")
             pack_to_send = struct.pack(udp_pack_format, 0xa5, bytes(server_data.id_serv, 'utf-8'), bytes(get_idcom(id_client), 'utf-8'), bytes(str(server_data.tcp_port), 'utf-8'))
             udp_socket_fd.sendto(pack_to_send, address)
@@ -254,6 +254,24 @@ def send_udp_package(package_type, address, id_client):
     elif package_type == '0xa7':
         print("INFO_REJ")
         pack_to_send = struct.pack(udp_pack_format)
+    elif package_type == '0xb0':        #ALIVE
+        msg = "INF. -> Les dades del ALIVE amb id son correctes: " + id_client + " ALIVE de resposta"
+        debug_message(msg)
+        pack_to_send = struct.pack(udp_pack_format, 0xb0, bytes(server_data.id_serv, 'utf-8'), bytes(get_idcom(id_client), 'utf-8'), bytes(id_client, 'utf-8'))
+        udp_socket_fd.sendto(pack_to_send, address)
+    elif package_type == '0xb1':        #ALIVE_NACK
+        print("ALIVE_NACK")
+    elif package_type == '0xb2':        #ALIVE_REJ
+        msg = "INF. -> Les dades del ALIVE amb id: " + id_client + " son incorrectes. Se li enviarà un ALIVE_REJ"
+        debug_message(msg)
+        print("INF. -> El client amb id:", package['id_transmitter'], "passa a l'estat DISCONNECTED")
+        pack_to_send = struct.pack(udp_pack_format, 0xb2, bytes(server_data.id_serv, 'utf-8'), bytes(get_idcom(id_client), 'utf-8'), bytes("Dades del ALIVE incorrectes", 'utf-8'))
+        udp_socket_fd.sendto(pack_to_send, address)
+
+        disconnect_client(id_client)
+    else:
+        print("UNKNOWN_PACKAGE")
+
 
 def treat_received_udp(package, address):
     if package['package_type'] == '0xa0':       #REG_REQ
@@ -270,18 +288,31 @@ def treat_received_udp(package, address):
         debug_message(msg)
         if is_valid_udp(package, get_idcom(package['id_transmitter']), "Non_relevant_data_to_compare"):
             change_tcp_elems(package['id_transmitter'], package['data'])
+            change_status(package['id_transmitter'], "REGISTERED")
+            print("INF. -> El client amb id:", package['id_transmitter'], "passa a l'estat REGISTERED")
             print_authorized_clients()
+
             send_udp_package('0xa5', get_address(package['id_transmitter']), package['id_transmitter'])
         else:
             send_udp_package('0xa6', get_address(package['id_transmitter']), package['id_transmitter'])
     elif package['package_type'] == '0xb0':     #ALIVE
-            print("ALIVE")
+            msg = "INF. -> Rebut ALIVE del client amb id: " + package['id_transmitter'] + ". Es comprovaran les dades del dispositiu"
+            debug_message(msg)
+            if is_valid_udp(package, get_idcom(package['id_transmitter']), ""):
+                if get_status(package['id_transmitter']) == "REGISTERED":
+                    change_status(package['id_transmitter'], "SEND_ALIVE")
+                    print("INF. -> El client amb id:", package['id_transmitter'], "passa a l'estat SEND_ALIVE")
+                send_udp_package('0xb0', get_address(package['id_transmitter']), package['id_transmitter'])
+            else:
+                send_udp_package('0xb2', get_address(package['id_transmitter']), package['id_transmitter'])
+
+
     else:
-        printf("Rebut paquet UNKNOWN, el client amb id:", package['id_transmitter'], "passa a l'estat DISCONNECTED")
+        print("Rebut paquet UNKNOWN, el client amb id: ", package['id_transmitter'], "passa a l'estat DISCONNECTED")
         disconnect_client(package['id_transmitter'])
 
 def is_valid_udp(package, id_communication, data):
-    if package['package_type'] == 0xa0:
+    if package['package_type'] == 0xa0 or package['package_type'] == 0xb0:
         return is_authorized(package['id_transmitter']) and package['id_communication'] == id_communication and package['data'] == data
     else:
         return is_authorized(package['id_transmitter']) and package['id_communication'] == id_communication
