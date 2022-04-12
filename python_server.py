@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import signal
 import sys, os, traceback, optparse, struct, random, re
 import time
 import socket, select
@@ -187,15 +187,31 @@ def setup_sockets():
     debug_message("Sockets TCP i UDP inicialitzats correctament")
 
 def listen_to_connections():
-    global tcp_thread, udp_thread
+    global tcp_thread, udp_thread, commands_thread, tcp_idth, udp_idth, com_idth
     #tcp_thread = threading.Thread(target=tcp_connection)
     udp_thread = threading.Thread(target=udp_connection)
-    #tcp_thread.daemon = True
-    #udp_thread.setDaemon(True)
+    commands_thread = threading.Thread(target=read_commands)
 
     debug_message("INF. -> Connexions TCP i UDP inicialitzades correctament")
-    #tcp_thread.start()
     udp_thread.start()
+    commands_thread.start()
+
+
+def read_commands():
+    while True:
+        command = str(input())
+        if len(command) > 0:
+            treat_commands(command)
+
+def treat_commands(command):
+    global tcp_thread, udp_thread, commands_thread
+    if command == "list":
+        print_authorized_clients()
+    elif command == "quit":
+        print("Servidor tancat per l'execució de la comanda *quit*")
+        close_server()
+    else:
+        print("No implementada")
 
 def udp_connection():
     global udp_socket_fd
@@ -264,7 +280,7 @@ def send_udp_package(package_type, address, id_client):
     elif package_type == '0xb2':        #ALIVE_REJ
         msg = "INF. -> Les dades del ALIVE amb id: " + id_client + " son incorrectes. Se li enviarà un ALIVE_REJ"
         debug_message(msg)
-        print("INF. -> El client amb id:", package['id_transmitter'], "passa a l'estat DISCONNECTED")
+        print("INF. -> El client amb id:", id_client, "passa a l'estat DISCONNECTED")
         pack_to_send = struct.pack(udp_pack_format, 0xb2, bytes(server_data.id_serv, 'utf-8'), bytes(get_idcom(id_client), 'utf-8'), bytes("Dades del ALIVE incorrectes", 'utf-8'))
         udp_socket_fd.sendto(pack_to_send, address)
 
@@ -305,8 +321,6 @@ def treat_received_udp(package, address):
                 send_udp_package('0xb0', get_address(package['id_transmitter']), package['id_transmitter'])
             else:
                 send_udp_package('0xb2', get_address(package['id_transmitter']), package['id_transmitter'])
-
-
     else:
         print("Rebut paquet UNKNOWN, el client amb id: ", package['id_transmitter'], "passa a l'estat DISCONNECTED")
         disconnect_client(package['id_transmitter'])
@@ -390,6 +404,11 @@ def disconnect_client(id_client):
     change_idcom(id_client, "")
     change_address(id_client, "NONE")
     change_tcp_elems(id_client, "")
+
+def close_server():
+    tcp_socket_fd.close()
+    udp_socket_fd.close()
+    os.kill(0, signal.SIGKILL)
 
 def print_server():
     print("/* SERVER PARAMS */")
