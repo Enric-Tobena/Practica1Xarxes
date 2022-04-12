@@ -783,9 +783,9 @@ void set_elem_value(char id_elem[], char new_value[]) {
 }
 
 void send_tcp_data_package(unsigned char package_type, char id_elem[]) {
-    struct timeval tmv;
-    tmv.tv_sec = M;
-    tmv.tv_usec = 0;
+    //struct timeval tmv;
+    //tmv.tv_sec = M;
+    //tmv.tv_usec = 0;
 
     ssize_t send_p, recv_p;
 
@@ -807,10 +807,10 @@ void send_tcp_data_package(unsigned char package_type, char id_elem[]) {
         perror("Error al enviar el paquet SEND_DATA al servidor. ERR. -> mètode send()");
     }
 
-    setsockopt(tcp_socket.tcp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
+    //setsockopt(tcp_socket.tcp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
     recv_p = recv(tcp_socket.tcp_socket_fd, &received_tcp_from_server, sizeof(received_tcp_from_server), 0);
     if(recv_p < 0) {
-        printf("Timeout del socket TCP esgotat -> Dades no acceptades. S'iniciarà un nou procés de registre.\n");
+        //printf("Timeout del socket TCP esgotat -> Dades no acceptades. S'iniciarà un nou procés de registre.\n");
         num_reg_pr++;
         start_client(num_reg_pr);
     } else {

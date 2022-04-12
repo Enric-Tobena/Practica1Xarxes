@@ -12,7 +12,6 @@ tcp_pack_format = "B11s11s8s16s80s"
 debug = False
 clients_list = []
 
-
 class server_config:
     def __init__(self, id_serv, udp_port, tcp_port):
         self.id_serv = id_serv
@@ -188,11 +187,12 @@ def setup_sockets():
 
 def listen_to_connections():
     global tcp_thread, udp_thread, commands_thread, tcp_idth, udp_idth, com_idth
-    #tcp_thread = threading.Thread(target=tcp_connection)
+    tcp_thread = threading.Thread(target=tcp_connection)           #Implementar socket TCP
     udp_thread = threading.Thread(target=udp_connection)
     commands_thread = threading.Thread(target=read_commands)
 
     debug_message("INF. -> Connexions TCP i UDP inicialitzades correctament")
+    tcp_thread.start()
     udp_thread.start()
     commands_thread.start()
 
@@ -228,6 +228,18 @@ def udp_connection():
 
         received_pack = get_udp_params(pack_to_string)
         treat_received_udp(received_pack, address)
+
+def tcp_connection():
+   tcp_socket_fd.bind(('localhost', server_data.tcp_port))
+   tcp_socket_fd.listen(5)
+
+   while True:
+       s, a = tcp_socket_fd.accept()
+       received = tcp_socket_fd.recv(struct.calcsize(tcp_pack_format))                #Dona errors
+       pack_to_string = struct.unpack(tcp_pack_format, received)
+
+       get_tcp_params(pack_to_string)
+
 
 def send_udp_package(package_type, address, id_client):
     global tcp_thread, udp_thread
@@ -325,6 +337,31 @@ def treat_received_udp(package, address):
         print("Rebut paquet UNKNOWN, el client amb id: ", package['id_transmitter'], "passa a l'estat DISCONNECTED")
         disconnect_client(package['id_transmitter'])
 
+def get_udp_params(udp_params):         #se li passa un string que ve del struct.unpack
+    prov_list = []
+    ordered_data = {'package_type' : 0x00, 'id_transmitter' : "", 'id_communication' : "", 'data' : ""}
+
+    for param in udp_params:
+        prov_list.append(str(param))
+
+    ordered_data['package_type'] = str(hex(int(prov_list[0])))
+    ordered_data['id_transmitter'] = prov_list[1][2:12]
+    ordered_data['id_communication'] = prov_list[2][2:12]
+
+    if ordered_data['package_type'] != '0xa0':
+        if ordered_data['package_type'] == '0xa4':
+            ordered_data['data'] = prov_list[3].split("'")[1].split("\x00")[0]          #Faltara quadrar aixo dels elems
+
+    return ordered_data
+
+def get_tcp_params(tcp_params):
+    prov_list = []
+    ordered_data = {'package_type' : 0x00, 'id_transmitter' : "", 'id_communication' : "", 'element' : "", 'value' : "", 'info' : ""}
+
+    for param in tcp_params:
+        prov_list.append(str(param))
+        print(param)
+
 def is_valid_udp(package, id_communication, data):
     if package['package_type'] == 0xa0 or package['package_type'] == 0xb0:
         return is_authorized(package['id_transmitter']) and package['id_communication'] == id_communication and package['data'] == data
@@ -371,23 +408,6 @@ def get_idcom(client_id):
     for client in clients_list:
         if client.id_client == client_id:
             return client.id_communication
-
-def get_udp_params(udp_params):         #se li passa un string que ve del struct.unpack
-    prov_list = []
-    ordered_data = {'package_type' : 0x00, 'id_transmitter' : "", 'id_communication' : "", 'data' : ""}
-
-    for param in udp_params:
-        prov_list.append(str(param))
-
-    ordered_data['package_type'] = str(hex(int(prov_list[0])))
-    ordered_data['id_transmitter'] = prov_list[1][2:12]
-    ordered_data['id_communication'] = prov_list[2][2:12]
-
-    if ordered_data['package_type'] != '0xa0':
-        if ordered_data['package_type'] == '0xa4':
-            ordered_data['data'] = prov_list[3].split("'")[1].split("\x00")[0]          #Faltara quadrar aixo dels elems
-
-    return ordered_data
 
 def generate_rand_int(n):
     if n != 5:
