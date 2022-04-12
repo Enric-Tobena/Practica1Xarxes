@@ -239,6 +239,8 @@ def send_udp_package(package_type, address, id_client):
     elif package_type == '0xa5':        #INFO_ACK
         if get_status(id_client) == "WAIT_INFO":
             debug_message("INF. -> Dades del paquet REG_INFO correctes. Enviament de INFO_ACK")
+            pack_to_send = struct.pack(udp_pack_format, 0xa5, bytes(server_data.id_serv, 'utf-8'), bytes(get_idcom(id_client), 'utf-8'), bytes(str(server_data.tcp_port), 'utf-8'))
+            udp_socket_fd.sendto(pack_to_send, address)
         else:
             print("Estat del client", id_client, "incorrecte per rebre INFO_ACK")
             disconnect_client(id_client)
