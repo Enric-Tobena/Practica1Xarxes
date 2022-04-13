@@ -29,7 +29,6 @@ class client:
 def parse_args():
     global debug, server_data
     global clients_id_list
-    print(len(sys.argv))
     if len(sys.argv) <= 2:
         if len(sys.argv) == 2:
             if sys.argv[1] != "-d":
@@ -186,7 +185,7 @@ def setup_sockets():
     debug_message("Sockets TCP i UDP inicialitzats correctament")
 
 def listen_to_connections():
-    global tcp_thread, udp_thread, commands_thread, tcp_idth, udp_idth, com_idth
+    global tcp_thread, udp_thread, commands_thread
     tcp_thread = threading.Thread(target=tcp_connection)           #Implementar socket TCP
     udp_thread = threading.Thread(target=udp_connection)
     commands_thread = threading.Thread(target=read_commands)
@@ -213,10 +212,21 @@ def treat_commands(command):
     else:
         print("No implementada")
 
+def tcp_connection():
+   tcp_socket_fd.bind(('', server_data.tcp_port))
+   tcp_socket_fd.listen(5)
+
+   while True:
+       conn, addr = tcp_socket_fd.accept()
+       received = tcp_socket_fd.recvfrom(struct.calcsize(tcp_pack_format))                #Dona errors
+       pack_to_string = struct.unpack(tcp_pack_format, received)
+
+       get_tcp_params(pack_to_string)
+
 def udp_connection():
     global udp_socket_fd
     try:
-        udp_socket_fd.bind(('localhost', server_data.udp_port))
+        udp_socket_fd.bind(('', server_data.udp_port))
     except socket.error as err_msg:
         print("Error al mètode bind del socket UDP:", err_msg)
         exit(-1)
@@ -229,35 +239,22 @@ def udp_connection():
         received_pack = get_udp_params(pack_to_string)
         treat_received_udp(received_pack, address)
 
-def tcp_connection():
-   tcp_socket_fd.bind(('localhost', server_data.tcp_port))
-   tcp_socket_fd.listen(5)
-
-   while True:
-       s, add = tcp_socket_fd.accept()
-       print("Gggwo")
-       received, address = tcp_socket_fd.recv(struct.calcsize(tcp_pack_format))                #Dona errors
-       pack_to_string = struct.unpack(tcp_pack_format, received)
-
-       get_tcp_params(pack_to_string)
-
-
 def send_udp_package(package_type, address, id_client):
     global tcp_thread, udp_thread
-    if package_type == '0xa1':      #REG_REQ
-        debug_message("INF. -> Dades del paquet REG_REQ correctes. Enviament de REG_ACK")
+    if package_type == '0xa1':      #REG_ACK
+        if get_status(id_client) == "DISCONNECTED":
+            change_status(id_client, "WAIT_INFO")
+            debug_message("INF. -> Dades del paquet REG_REQ correctes. Enviament de REG_ACK")
 
-        id_com = generate_rand_int(10)
-        change_idcom(id_client, id_com)
-        new_udp_port = generate_rand_int(5)
-                                                                                                                        #Canviar port
-        pack_to_send = struct.pack(udp_pack_format, 0xa1, bytes(server_data.id_serv, 'utf-8'), bytes(id_com, 'utf-8'), bytes(str(server_data.udp_port), 'utf-8'))
-        udp_socket_fd.sendto(pack_to_send, address)
+            id_com = generate_rand_int(10)
+            change_idcom(id_client, id_com)
+                                                                                                                            #Canviar port
+            pack_to_send = struct.pack(udp_pack_format, 0xa1, bytes(server_data.id_serv, 'utf-8'), bytes(id_com, 'utf-8'), bytes(str(udp_socket_fd.getsockname()[1]), 'utf-8'))
+            udp_socket_fd.sendto(pack_to_send, address)
 
-        print("INF. -> El client", id_client, "passa a l'estat WAIT-INFO")
+            print("INF. -> El client", id_client, "passa a l'estat WAIT-INFO")
 
-        print_authorized_clients()
-
+            print_authorized_clients()
     elif package_type == '0xa2':
         print("REG_NACK")
         pack_to_send = struct.pack(udp_pack_format)
@@ -307,7 +304,6 @@ def treat_received_udp(package, address):
         msg = "INF. -> Rebut paquet REG_REQ del client amb id: " + package['id_transmitter'] + ". Es comprovaran les dades del dispositiu"
         debug_message(msg)
         if is_valid_udp(package, "0000000000", ""):
-            change_status(package['id_transmitter'], "WAIT_INFO")
             change_address(package['id_transmitter'], address)
             send_udp_package('0xa1', address, package['id_transmitter'])
         else:
@@ -348,10 +344,10 @@ def get_udp_params(udp_params):         #se li passa un string que ve del struct
     ordered_data['package_type'] = str(hex(int(prov_list[0])))
     ordered_data['id_transmitter'] = prov_list[1][2:12]
     ordered_data['id_communication'] = prov_list[2][2:12]
+    ordered_data['data'] = prov_list[3]
 
-    if ordered_data['package_type'] != '0xa0':
-        if ordered_data['package_type'] == '0xa4':
-            ordered_data['data'] = prov_list[3].split("'")[1].split("\x00")[0]          #Faltara quadrar aixo dels elems
+    if ordered_data['package_type'] == '0xa4':
+        ordered_data['data'] = prov_list[3].split("'")[1].split("\x00")[0]          #Faltara quadrar aixo dels elems
 
     return ordered_data
 
@@ -365,7 +361,7 @@ def get_tcp_params(tcp_params):
 
 def is_valid_udp(package, id_communication, data):
     if package['package_type'] == 0xa0 or package['package_type'] == 0xb0:
-        return is_authorized(package['id_transmitter']) and package['id_communication'] == id_communication and package['data'] == data
+        return is_authorized(package['id_transmitter']) and package['id_communication'] == id_communication and len(package['data']) == 0
     else:
         return is_authorized(package['id_transmitter']) and package['id_communication'] == id_communication
 

@@ -820,7 +820,6 @@ void send_tcp_data_package(unsigned char package_type, char id_elem[]) {
 
 }
 
-
 void treat_data_tcp_package(struct TCPPackage received_pack) {
     if(received_pack.package_type == DATA_ACK) {
         if(valid_tcp_package(received_pack)) {
@@ -836,7 +835,7 @@ void treat_data_tcp_package(struct TCPPackage received_pack) {
         }
     } else if(received_pack.package_type == DATA_NACK) {
         printf("Rebut paquet DATA_NACK -> Error al emmagatzemar les dades o dades errònies.\n");
-        close(tcp_socket.tcp_socket_fd);
+        //close(tcp_socket.tcp_socket_fd);
     } else if(received_pack.package_type == DATA_REJ) {
         printf("Rebut paquet DATA_REJ -> Informació rebutjada. S'obrirà un nou procés de registre.\n");
         client.state = NOT_REGISTERED;
