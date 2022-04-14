@@ -378,7 +378,6 @@ void debug_message(char message[]) {
 void start_client(int num_process) {
     setup_udp_socket();
     struct UDPPackage reg_request = build_udp_package(REG_REQ, client.client_id, "0000000000", "");
-    //print_udp_package(reg_request);
 
     int attempts, packages;
     for(attempts = num_process; attempts < O; attempts++) {
@@ -436,9 +435,12 @@ int first_P_register_req(struct UDPPackage reg_request) {
         setsockopt(udp_socket.udp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
         recv = recvfrom(udp_socket.udp_socket_fd, &received_udp_from_server, sizeof(received_udp_from_server), 0,
                         (struct sockaddr *) 0, (socklen_t *) 0);
-        print_udp_package(received_udp_from_server);
 
         if(recv > 0) {
+            if(active_debug) {
+                printf("Rebut: \n");
+                print_udp_package(received_udp_from_server);
+            }
             return packages;
         }
     }
@@ -472,7 +474,10 @@ int second_register_req(struct UDPPackage reg_request) {
         setsockopt(udp_socket.udp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
         recv = recvfrom(udp_socket.udp_socket_fd, &received_udp_from_server, sizeof(received_udp_from_server), 0,
                         (struct sockaddr *) 0, (socklen_t *) 0);
-        //print_udp_package(received_udp_from_server);
+        if(active_debug) {
+            printf("Rebut: \n");
+            print_udp_package(received_udp_from_server);
+        }
 
         if (recv < 0) {
             if(packages == N) {
@@ -480,6 +485,10 @@ int second_register_req(struct UDPPackage reg_request) {
             }
             tmv.tv_sec = package_timer(tmv.tv_sec);
         } else {
+            if(active_debug) {
+                printf("Rebut: \n");
+                print_udp_package(received_udp_from_server);
+            }
             return packages;
         }
     }
@@ -555,7 +564,6 @@ void send_reg_info() {
     strcat(data, client.all_elems);
 
     struct UDPPackage reg_info = build_udp_package(REG_INFO, client.client_id, server_data.communication_id, data);
-    //print_udp_package(reg_info);
 
 
     udp_socket.udp_socket_address.sin_port = htons(atoi(received_udp_from_server.data));
@@ -572,7 +580,7 @@ void send_reg_info() {
         setsockopt(udp_socket.udp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
         recv = recvfrom(udp_socket.udp_socket_fd, &received_udp_from_server, sizeof(received_udp_from_server), 0,
                         (struct sockaddr *) 0, (socklen_t *) 0);
-        //print_udp_package(received_udp_from_server);
+
         if(recv < 0) {
             client.state = NOT_REGISTERED;
             debug_message("INF. -> No s'ha rebut el paquet de confirmació de client");
@@ -581,6 +589,10 @@ void send_reg_info() {
             num_reg_pr++;
             start_client(num_reg_pr);
         } else {
+            if(active_debug) {
+                printf("Rebut: \n");
+                print_udp_package(received_udp_from_server);
+            }
             treat_register_udp_package(received_udp_from_server);
         }
     }
@@ -617,7 +629,6 @@ void send_alive_packs() {
                 }
                 debug_message("INF. -> Enviament d'ALIVE");
             } else {
-                //print_udp_package(received_udp_from_server);
                 not_received_alives = 0;
                 treat_alive_udp_package(received_udp_from_server);
             }
@@ -637,7 +648,6 @@ void treat_alive_udp_package(struct UDPPackage received_pack) {
             }
             debug_message("INF. -> Enviament d'ALIVE");
             sleep(V);
-            //exit(0);        //Substituir el break i treure posteriorment
         } else {
             printf("ERR. -> Dades del paquet ALIVE errònies. S'iniciarà un nou procés de registre.\n");
             client.state = NOT_REGISTERED;
@@ -892,6 +902,7 @@ struct UDPPackage build_udp_package(unsigned char package_type, char transmitter
 }
 
 void print_elems() {
+    printf("***************************************************\n");
     printf("ELEMENT   VALUE\n");
     printf("-------   -------\n");
     printf("%s    %s\n", client.elem_one, client.value_one);
@@ -899,6 +910,7 @@ void print_elems() {
     printf("%s    %s\n", client.elem_three, client.value_three);
     printf("%s    %s\n", client.elem_four, client.value_four);
     printf("%s    %s\n", client.elem_five, client.value_five);
+    printf("***************************************************\n");
 }
 
 void print_client() {
