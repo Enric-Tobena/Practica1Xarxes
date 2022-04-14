@@ -28,6 +28,7 @@ class client:
         self.status = 'DISCONNECTED'
         self.tcp_and_elems = ""
         self.last_time_alive = 0
+        self.not_received_alives = 0
 
 
 def parse_args():
@@ -190,15 +191,13 @@ def setup_sockets():
     debug_message("Sockets TCP i UDP inicialitzats correctament")
 
 
-def listen_to_connections():
+def listen_to_connections():  # Inici dels processos en execució paral·lela de rebuda de paquets, lector de comandes i comprovació del timeout dels ALIVE
     global tcp_thread, udp_thread, commands_thread
-    tcp_thread = threading.Thread(target=tcp_connection)  # Implementar socket TCP
     udp_thread = threading.Thread(target=udp_connection)
     check_timeout_thread = threading.Thread(target=check_timeout_alive)
     commands_thread = threading.Thread(target=read_commands)
 
     debug_message("INF. -> Connexions TCP i UDP inicialitzades correctament")
-    tcp_thread.start()
     udp_thread.start()
     check_timeout_thread.start()
     commands_thread.start()
@@ -211,7 +210,7 @@ def read_commands():
             treat_commands(command)
 
 
-def treat_commands(command):
+def treat_commands(command):  # Lector de comandes
     global tcp_thread, udp_thread, commands_thread
     if command == "list":
         print_authorized_clients()
@@ -222,19 +221,7 @@ def treat_commands(command):
         print("No implementada")
 
 
-def tcp_connection():
-    tcp_socket_fd.bind(('', server_data.tcp_port))
-    tcp_socket_fd.listen(5)
-
-    while True:
-        conn, addr = tcp_socket_fd.accept()
-        received = tcp_socket_fd.recvfrom(struct.calcsize(tcp_pack_format))  # Dona errors
-        pack_to_string = struct.unpack(tcp_pack_format, received)
-
-        get_tcp_params(pack_to_string)
-
-
-def udp_connection():
+def udp_connection():  # Receptor de paquets UDP
     global udp_socket_fd
     try:
         udp_socket_fd.bind(('', server_data.udp_port))
@@ -260,28 +247,20 @@ def send_udp_package(package_type, address, id_client):
 
             id_com = generate_rand_int(10)
             set_idcom(id_client, id_com)
-            # Canviar port
-            pack_to_send = struct.pack(udp_pack_format, 0xa1, bytes(server_data.id_serv, 'utf-8'),
-                                       bytes(id_com, 'utf-8'), bytes(str(udp_socket_fd.getsockname()[1]), 'utf-8'))
+            pack_to_send = struct.pack(udp_pack_format, 0xa1, bytes(server_data.id_serv, 'utf-8'), bytes(id_com, 'utf-8'), bytes(str(udp_socket_fd.getsockname()[1]), 'utf-8'))
             udp_socket_fd.sendto(pack_to_send, address)
 
             print("INF. -> El client", id_client, "passa a l'estat WAIT-INFO")
 
             print_authorized_clients()
-    elif package_type == '0xa2':
-        print("REG_NACK")
-        pack_to_send = struct.pack(udp_pack_format)
     elif package_type == '0xa3':  # REG_REJ
         debug_message("INF. -> Dades del paquet REG_REQ incorrectes. Enviament de REG_REJ")
-        pack_to_send = struct.pack(udp_pack_format, 0xa3, bytes(server_data.id_serv, 'utf-8'),
-                                   bytes("0000000000", 'utf-8'),
-                                   bytes("Dades incorrectes o client no autoritzat", 'utf-8'))
+        pack_to_send = struct.pack(udp_pack_format, 0xa3, bytes(server_data.id_serv, 'utf-8'), bytes("0000000000", 'utf-8'), bytes("Dades incorrectes o client no autoritzat", 'utf-8'))
         udp_socket_fd.sendto(pack_to_send, address)
     elif package_type == '0xa5':  # INFO_ACK
         if get_status(id_client) == "REGISTERED":
             debug_message("INF. -> Dades del paquet REG_INFO correctes. Enviament de INFO_ACK")
-            pack_to_send = struct.pack(udp_pack_format, 0xa5, bytes(server_data.id_serv, 'utf-8'),
-                                       bytes(get_idcom(id_client), 'utf-8'), bytes(str(server_data.tcp_port), 'utf-8'))
+            pack_to_send = struct.pack(udp_pack_format, 0xa5, bytes(server_data.id_serv, 'utf-8'), bytes(get_idcom(id_client), 'utf-8'), bytes(str(server_data.tcp_port), 'utf-8'))
             udp_socket_fd.sendto(pack_to_send, address)
         else:
             print("Estat del client", id_client, "incorrecte per rebre INFO_ACK")
@@ -289,19 +268,14 @@ def send_udp_package(package_type, address, id_client):
     elif package_type == '0xa6':  # INFO_NACK
         debug_message("INF. -> Dades del paquet REG_INFO incorrectes. Enviament de INFO_NACK")
         print("INF. -> El client", id_client, "passa a l'estat DISCONNECTED")
-        pack_to_send = struct.pack(udp_pack_format, 0xa6, bytes(server_data.id_serv, 'utf-8'),
-                                   bytes(get_idcom(id_client), 'utf-8'), bytes("Dades incorrectes", 'utf-8'))
+        pack_to_send = struct.pack(udp_pack_format, 0xa6, bytes(server_data.id_serv, 'utf-8'), bytes(get_idcom(id_client), 'utf-8'), bytes("Dades incorrectes", 'utf-8'))
         udp_socket_fd.sendto(pack_to_send, address)
 
         disconnect_client(id_client)
-    elif package_type == '0xa7':
-        print("INFO_REJ")
-        pack_to_send = struct.pack(udp_pack_format)
     elif package_type == '0xb0':  # ALIVE
         msg = "INF. -> Les dades del ALIVE amb id son correctes: " + id_client + " ALIVE de resposta"
         debug_message(msg)
-        pack_to_send = struct.pack(udp_pack_format, 0xb0, bytes(server_data.id_serv, 'utf-8'),
-                                   bytes(get_idcom(id_client), 'utf-8'), bytes(id_client, 'utf-8'))
+        pack_to_send = struct.pack(udp_pack_format, 0xb0, bytes(server_data.id_serv, 'utf-8'), bytes(get_idcom(id_client), 'utf-8'), bytes(id_client, 'utf-8'))
         udp_socket_fd.sendto(pack_to_send, address)
     elif package_type == '0xb1':  # ALIVE_NACK
         print("ALIVE_NACK")
@@ -309,13 +283,13 @@ def send_udp_package(package_type, address, id_client):
         msg = "INF. -> Les dades del ALIVE amb id: " + id_client + " son incorrectes. Se li enviarà un ALIVE_REJ"
         debug_message(msg)
         print("INF. -> El client amb id:", id_client, "passa a l'estat DISCONNECTED")
-        pack_to_send = struct.pack(udp_pack_format, 0xb2, bytes(server_data.id_serv, 'utf-8'),
-                                   bytes(get_idcom(id_client), 'utf-8'), bytes("Dades del ALIVE incorrectes", 'utf-8'))
+        pack_to_send = struct.pack(udp_pack_format, 0xb2, bytes(server_data.id_serv, 'utf-8'), bytes(get_idcom(id_client), 'utf-8'), bytes("Dades del ALIVE incorrectes", 'utf-8'))
         udp_socket_fd.sendto(pack_to_send, address)
 
         disconnect_client(id_client)
     else:
-        print("UNKNOWN_PACKAGE")
+        print("Rebut paquet UNKNOWN. El client", id_client," es desconnectarà.")
+        disconnect_client(id_client)
 
 
 def treat_received_udp(package, address):
@@ -342,8 +316,7 @@ def treat_received_udp(package, address):
         else:
             send_udp_package('0xa6', get_address(package['id_transmitter']), package['id_transmitter'])
     elif package['package_type'] == '0xb0':  # ALIVE
-        if get_status(package['id_transmitter']) == "REGISTERED" or get_status(
-                package['id_transmitter']) == "SEND_ALIVE":
+        if get_status(package['id_transmitter']) == "REGISTERED" or get_status(package['id_transmitter']) == "SEND_ALIVE":
             msg = "INF. -> Rebut ALIVE del client amb id: " + package[
                 'id_transmitter'] + ". Es comprovaran les dades del dispositiu"
             debug_message(msg)
@@ -360,14 +333,17 @@ def treat_received_udp(package, address):
         disconnect_client(package['id_transmitter'])
 
 
-def check_timeout_alive():
-    w = 3
+def check_timeout_alive():  # Fa el recorregut de la llista de clients per veure si n'ha de desconnectar algun
+    x = 3
     while True:
         for client in clients_list:
-            if get_status(client.id_client) == "SEND_ALIVE" and time.time() - get_last_time_alive(client.id_client) > w:
-                print("Esgotat el temps de resposta del client amb id:", client.id_client, "per ALIVE")
-                print("El client amb id:", client.id_client, "passa a l'estat DISCONNECTED")
-                disconnect_client(client.id_client)
+            if get_status(client.id_client) == "SEND_ALIVE" and time.time() - get_last_time_alive(client.id_client) > x:
+                client.not_received_alives += 1
+                print("No s'ha rebut l'ALIVE del client amb id:", client.id_client, "ALIVES no rebuts: ",
+                      client.not_received_alives)
+                if client.not_received_alives == x:
+                    print("El client amb id:", client.id_client, "passa a l'estat DISCONNECTED")
+                    disconnect_client(client.id_client)
 
 
 def get_udp_params(udp_params):  # Se li passa un string que ve del struct.unpack
@@ -386,16 +362,6 @@ def get_udp_params(udp_params):  # Se li passa un string que ve del struct.unpac
         ordered_data['data'] = prov_list[3].split("'")[1].split("\x00")[0]  # Faltara quadrar aixo dels elems
 
     return ordered_data
-
-
-def get_tcp_params(tcp_params):
-    prov_list = []
-    ordered_data = {'package_type': 0x00, 'id_transmitter': "", 'id_communication': "", 'element': "", 'value': "",
-                    'info': ""}
-
-    for param in tcp_params:
-        prov_list.append(str(param))
-        print(param)
 
 
 def is_valid_udp(package, id_communication, data):
@@ -467,12 +433,8 @@ def get_last_time_alive(client_id):
             return client.last_time_alive
 
 
-def generate_rand_int(n):
-    if n != 5:
-        result = str(random.randint(0, 9))
-    else:
-        result = str(random.randint(0, 5))
-
+def generate_rand_int(n):                   # Genera la Id de comunicació per la comunicació client-servidor
+    result = str(random.randint(0, 9))
     for i in range(0, n - 1):
         result += str(random.randint(0, 9))
     return result
@@ -483,6 +445,14 @@ def disconnect_client(id_client):
     set_idcom(id_client, "")
     set_address(id_client, "NONE")
     set_tcp_elems(id_client, "")
+    restart_alives(id_client)
+
+
+def restart_alives(client_id):
+    for client in clients_list:
+        if client.id_client == client_id:
+            client.not_received_alives = 0
+            client.last_time_alive = 0
 
 
 def close_server():
