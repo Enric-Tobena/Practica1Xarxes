@@ -719,30 +719,7 @@ void treat_command(char command[]) {
             }
             return;
         } else if(strcmp("send", token) == 0) {
-            int j = 0;
-            char id_elem[15];
-            token = strtok(NULL, " \n");
-            while(token != NULL) {
-                if(j == 0) {
-                    strcpy(id_elem, token);
-                }
-
-                token = strtok(NULL, " \n");
-                j++;
-            }
-
-            if(j == 1) {
-                if(valid_elem_id(id_elem)) {
-                    send_tcp_data_package(SEND_DATA, id_elem);
-                    return;
-                } else {
-                    printf("%s -> Identificador no vàlid.\n", id_elem);
-                    return;
-                }
-            } else {
-                printf("Ús: send <identificador_element>.\n");
-            }
-            return;
+            printf("Comanda *send* no implementada.\n");
         } else {
             printf("*%s* -> Comanda errònia.\n", token);
             return;
@@ -783,9 +760,9 @@ void set_elem_value(char id_elem[], char new_value[]) {
 }
 
 void send_tcp_data_package(unsigned char package_type, char id_elem[]) {
-    //struct timeval tmv;
-    //tmv.tv_sec = M;
-    //tmv.tv_usec = 0;
+    struct timeval tmv;
+    tmv.tv_sec = M;
+    tmv.tv_usec = 0;
 
     ssize_t send_p, recv_p;
 
@@ -807,10 +784,10 @@ void send_tcp_data_package(unsigned char package_type, char id_elem[]) {
         perror("Error al enviar el paquet SEND_DATA al servidor. ERR. -> mètode send()");
     }
 
-    //setsockopt(tcp_socket.tcp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
+    setsockopt(tcp_socket.tcp_socket_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tmv, sizeof(tmv));
     recv_p = recv(tcp_socket.tcp_socket_fd, &received_tcp_from_server, sizeof(received_tcp_from_server), 0);
     if(recv_p < 0) {
-        //printf("Timeout del socket TCP esgotat -> Dades no acceptades. S'iniciarà un nou procés de registre.\n");
+        printf("Timeout del socket TCP esgotat -> Dades no acceptades. S'iniciarà un nou procés de registre.\n");
         num_reg_pr++;
         start_client(num_reg_pr);
     } else {
@@ -835,7 +812,7 @@ void treat_data_tcp_package(struct TCPPackage received_pack) {
         }
     } else if(received_pack.package_type == DATA_NACK) {
         printf("Rebut paquet DATA_NACK -> Error al emmagatzemar les dades o dades errònies.\n");
-        //close(tcp_socket.tcp_socket_fd);
+        close(tcp_socket.tcp_socket_fd);
     } else if(received_pack.package_type == DATA_REJ) {
         printf("Rebut paquet DATA_REJ -> Informació rebutjada. S'obrirà un nou procés de registre.\n");
         client.state = NOT_REGISTERED;
