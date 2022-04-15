@@ -218,7 +218,7 @@ def treat_commands(command):  # Lector de comandes
         print("Servidor tancat per l'execució de la comanda *quit*")
         close_server()
     else:
-        print("No implementada")
+        print("*", command, "* :", "Comanda errònia")
 
 
 def udp_connection():  # Receptor de paquets UDP
